@@ -1,0 +1,591 @@
+// src/pages/AdminUniversityManagement.jsx
+import React, { useState, useEffect } from "react";
+import axios from "axios";
+import { toast } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
+import { API_BASE_URL } from "../config/api";
+
+export default function AdminUniversityManagement() {
+  const [universities, setUniversities] = useState([]);
+  const [name, setName] = useState("");
+  const [editId, setEditId] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [imageFile, setImageFile] = useState(null);
+  const [imagePreview, setImagePreview] = useState(null);
+  const [pagination, setPagination] = useState({
+    limit: 10,
+    offset: 0,
+    total: 0,
+    status: "ACTIVE"
+  });
+  const [selectedUniversity, setSelectedUniversity] = useState(null);
+  const [semesters, setSemesters] = useState([]);
+  const [connectedSemesters, setConnectedSemesters] = useState([]);
+  const [showSemesterModal, setShowSemesterModal] = useState(false);
+  const [selectedSemesters, setSelectedSemesters] = useState([]);
+  const [loadingSemesters, setLoadingSemesters] = useState(false);
+  const [loadingConnections, setLoadingConnections] = useState(false);
+
+  const token = localStorage.getItem("token");
+
+  // ------------------------
+  // Axios API Functions
+  // ------------------------
+
+  // GET: Get University List
+  const fetchUniversities = async () => {
+    try {
+      setLoading(true);
+      const response = await axios.get(`${API_BASE_URL}/university/list`, {
+        headers: { Authorization: `Bearer ${token}` },
+        params: {
+          limit: pagination.limit,
+          offset: pagination.offset,
+          status: pagination.status,
+          keyword: ""
+        }
+      });
+      setUniversities(response.data.result || []);
+      setPagination(prev => ({ ...prev, total: response.data.total || 0 }));
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to fetch universities");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // POST: Create University
+  const createUniversity = async (name) => {
+    try {
+      const response = await axios.post(
+        `${API_BASE_URL}/university`,
+        { name },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      toast.success("University created successfully");
+      return response.data;
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to create university");
+      throw error;
+    }
+  };
+
+  // PATCH: Update University
+  const updateUniversity = async (id, name) => {
+    try {
+      await axios.patch(
+        `${API_BASE_URL}/university/${id}`,
+        { name },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      toast.success("University updated successfully");
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to update university");
+      throw error;
+    }
+  };
+
+  // PUT: Update University Status
+  const updateUniversityStatus = async (id, currentStatus) => {
+    const newStatus = currentStatus === "ACTIVE" ? "DEACTIVE" : "ACTIVE";
+    try {
+      await axios.put(
+        `${API_BASE_URL}/university/status/${id}`,
+        { status: newStatus },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      toast.success(`Status updated to ${newStatus}`);
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to update status");
+      throw error;
+    }
+  };
+
+  // PUT: Update University Icon
+  const updateUniversityIcon = async (id, imageFile) => {
+    const formData = new FormData();
+    formData.append("file", imageFile);
+
+    try {
+      await axios.put(`${API_BASE_URL}/university/icon/${id}`, formData, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "multipart/form-data"
+        }
+      });
+      toast.success("Icon updated successfully");
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to update icon");
+      throw error;
+    }
+  };
+
+  // GET: Fetch all active semesters
+  const fetchAllSemesters = async () => {
+    try {
+      setLoadingSemesters(true);
+      const response = await axios.get(`${API_BASE_URL}/semester/list`, {
+        headers: { Authorization: `Bearer ${token}` },
+        params: {
+          status: "ACTIVE",
+          limit: 100,
+          offset: 0,
+          keyword: ""
+        }
+      });
+      setSemesters(response.data.result || []);
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to fetch semesters");
+    } finally {
+      setLoadingSemesters(false);
+    }
+  };
+
+  // GET: Fetch connected semesters for a university
+  const fetchConnectedSemesters = async (universityId) => {
+    try {
+      setLoadingConnections(true);
+      const response = await axios.get(`${API_BASE_URL}/uni-sem/${universityId}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setConnectedSemesters(response.data.result || []);
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to fetch semester connections");
+    } finally {
+      setLoadingConnections(false);
+    }
+  };
+
+  // POST: Connect semesters to university
+  const connectSemestersToUniversity = async (universityId, semesterIds) => {
+    try {
+      const promises = semesterIds.map(semesterId => 
+        axios.post(`${API_BASE_URL}/uni-sem`, {
+          universityId,
+          semesterId
+        }, {
+          headers: { Authorization: `Bearer ${token}` }
+        })
+      );
+      
+      await Promise.all(promises);
+      toast.success("Semesters connected successfully");
+      fetchConnectedSemesters(universityId);
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to connect semesters");
+    }
+  };
+
+  // DELETE: Remove semester connection
+  const removeSemesterConnection = async (connectionId, universityId) => {
+    try {
+      await axios.delete(`${API_BASE_URL}/uni-sem/remove/${connectionId}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      toast.success("Connection removed successfully");
+      fetchConnectedSemesters(universityId);
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to remove connection");
+    }
+  };
+
+  // ------------------------
+  // Component Logic
+  // ------------------------
+  useEffect(() => {
+    fetchUniversities();
+  }, [pagination.offset, pagination.status]);
+
+  const handleImageChange = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      setImageFile(file);
+      setImagePreview(URL.createObjectURL(file));
+    }
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!name.trim()) {
+      toast.warning("Please enter a university name");
+      return;
+    }
+
+    try {
+      if (editId) {
+        await updateUniversity(editId, name);
+        if (imageFile) {
+          await updateUniversityIcon(editId, imageFile);
+        }
+        setEditId(null);
+      } else {
+        const newUniversity = await createUniversity(name);
+        if (imageFile) {
+          await updateUniversityIcon(newUniversity.id, imageFile);
+        }
+      }
+
+      setName("");
+      setImageFile(null);
+      setImagePreview(null);
+      fetchUniversities();
+    } catch (error) {
+      console.error("Operation failed:", error);
+    }
+  };
+
+  const handleEdit = (university) => {
+    setName(university.name);
+    setEditId(university.id);
+    setImagePreview(university.icon || null);
+  };
+
+  const handleStatusToggle = async (id, currentStatus) => {
+    await updateUniversityStatus(id, currentStatus);
+    fetchUniversities();
+  };
+
+  const handlePageChange = (newOffset) => {
+    setPagination(prev => ({ ...prev, offset: newOffset }));
+  };
+
+  const handleStatusFilter = (status) => {
+    setPagination(prev => ({ ...prev, status, offset: 0 }));
+  };
+
+  const handleOpenSemesterModal = async (university) => {
+    setSelectedUniversity(university);
+    await fetchAllSemesters();
+    await fetchConnectedSemesters(university.id);
+    setShowSemesterModal(true);
+  };
+
+  const handleSemesterSelection = (semesterId) => {
+    setSelectedSemesters(prev => 
+      prev.includes(semesterId) 
+        ? prev.filter(id => id !== semesterId) 
+        : [...prev, semesterId]
+    );
+  };
+
+  const handleConnectSemesters = async () => {
+    if (selectedSemesters.length === 0) {
+      toast.warning("Please select at least one semester");
+      return;
+    }
+    await connectSemestersToUniversity(selectedUniversity.id, selectedSemesters);
+    setSelectedSemesters([]);
+  };
+
+  const handleCloseModal = () => {
+    setShowSemesterModal(false);
+    setSelectedUniversity(null);
+    setSelectedSemesters([]);
+  };
+
+  return (
+    <div className="p-6 max-w-6xl mx-auto">
+      <h1 className="text-2xl font-bold mb-6">University Management</h1>
+
+      {/* University Form */}
+      <form onSubmit={handleSubmit} className="bg-white p-6 rounded-lg shadow-md mb-8">
+        <h2 className="text-xl font-semibold mb-4">
+          {editId ? "Edit University" : "Create New University"}
+        </h2>
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div>
+            <div className="mb-4">
+              <label className="block text-gray-700 mb-2">University Name*</label>
+              <input
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                className="w-full border border-gray-300 rounded p-2"
+                required
+              />
+            </div>
+          </div>
+          
+          <div>
+            <div className="mb-4">
+              <label className="block text-gray-700 mb-2">University Icon</label>
+              <input
+                type="file"
+                accept="image/*"
+                onChange={handleImageChange}
+                className="w-full border border-gray-300 rounded p-2"
+              />
+            </div>
+            
+            {imagePreview && (
+              <div className="mt-4">
+                <h3 className="text-gray-700 mb-2">Icon Preview</h3>
+                <img
+                  src={imagePreview}
+                  alt="Preview"
+                  className="max-w-full h-auto max-h-32 rounded border border-gray-300"
+                />
+              </div>
+            )}
+          </div>
+        </div>
+        
+        <div className="mt-6 flex justify-end space-x-4">
+          {editId && (
+            <button
+              type="button"
+              onClick={() => {
+                setEditId(null);
+                setName("");
+                setImagePreview(null);
+              }}
+              className="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600"
+            >
+              Cancel
+            </button>
+          )}
+          <button
+            type="submit"
+            className="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700"
+          >
+            {editId ? "Update University" : "Create University"}
+          </button>
+        </div>
+      </form>
+
+      {/* Status Filter */}
+      <div className="flex space-x-4 mb-4">
+        <button
+          onClick={() => handleStatusFilter("ACTIVE")}
+          className={`px-4 py-2 rounded ${
+            pagination.status === "ACTIVE" 
+              ? "bg-green-500 text-white" 
+              : "bg-gray-200"
+          }`}
+        >
+          Active
+        </button>
+        <button
+          onClick={() => handleStatusFilter("PENDING")}
+          className={`px-4 py-2 rounded ${
+            pagination.status === "PENDING" 
+              ? "bg-yellow-500 text-white" 
+              : "bg-gray-200"
+          }`}
+        >
+          Pending
+        </button>
+        <button
+          onClick={() => handleStatusFilter("DEACTIVE")}
+          className={`px-4 py-2 rounded ${
+            pagination.status === "DEACTIVE" 
+              ? "bg-red-500 text-white" 
+              : "bg-gray-200"
+          }`}
+        >
+          Deactive
+        </button>
+      </div>
+
+      {/* Universities Table */}
+      <div className="bg-white p-6 rounded-lg shadow-md">
+        <h2 className="text-xl font-semibold mb-4">Universities List</h2>
+        
+        {loading ? (
+          <div className="text-center py-8">Loading universities...</div>
+        ) : universities.length === 0 ? (
+          <div className="text-center py-8">No universities found</div>
+        ) : (
+          <>
+            <div className="overflow-x-auto">
+              <table className="min-w-full border border-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">#</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Icon</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {universities.map((university, index) => (
+                    <tr key={university.id}>
+                      <td className="px-6 py-4 whitespace-nowrap">{pagination.offset + index + 1}</td>
+                      <td className="px-6 py-4 whitespace-nowrap font-medium">{university.name}</td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        {university.icon ? (
+                          <img
+                            src={university.icon}
+                            alt={university.name}
+                            className="h-12 w-12 rounded object-cover"
+                            onError={(e) => {
+                              e.target.onerror = null; 
+                              e.target.src = "https://via.placeholder.com/48?text=No+Icon";
+                            }}
+                          />
+                        ) : (
+                          <div className="h-12 w-12 rounded bg-gray-200 flex items-center justify-center">
+                            <span className="text-xs text-gray-500">No Icon</span>
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span
+                          className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full cursor-pointer ${
+                            university.status === "ACTIVE"
+                              ? "bg-green-100 text-green-800"
+                              : university.status === "PENDING"
+                                ? "bg-yellow-100 text-yellow-800"
+                                : "bg-red-100 text-red-800"
+                          }`}
+                          onClick={() => handleStatusToggle(university.id, university.status)}
+                        >
+                          {university.status}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap space-x-2">
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            onClick={() => handleEdit(university)}
+                            className="flex items-center px-3 py-1.5 bg-yellow-50 border border-yellow-200 rounded-md text-yellow-700 hover:bg-yellow-100 transition-colors"
+                          >
+                            <svg className="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                            </svg>
+                            Edit
+                          </button>
+
+                          <button
+                            onClick={() => handleOpenSemesterModal(university)}
+                            className="flex items-center px-3 py-1.5 bg-blue-50 border border-blue-200 rounded-md text-blue-700 hover:bg-blue-100 transition-colors"
+                          >
+                            <svg className="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" />
+                            </svg>
+                            Connect Semesters
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Pagination */}
+            <div className="flex justify-between items-center mt-4">
+              <div>
+                Showing {pagination.offset + 1} to {Math.min(pagination.offset + pagination.limit, pagination.total)} of {pagination.total} universities
+              </div>
+              <div className="flex space-x-2">
+                <button
+                  onClick={() => handlePageChange(Math.max(0, pagination.offset - pagination.limit))}
+                  disabled={pagination.offset === 0}
+                  className="px-4 py-2 border rounded disabled:opacity-50"
+                >
+                  Previous
+                </button>
+                <button
+                  onClick={() => handlePageChange(pagination.offset + pagination.limit)}
+                  disabled={pagination.offset + pagination.limit >= pagination.total}
+                  className="px-4 py-2 border rounded disabled:opacity-50"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+
+      {/* Semester Connection Modal */}
+      {showSemesterModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <div className="p-6">
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-xl font-semibold">
+                  Manage Semesters for University: {selectedUniversity?.name}
+                </h2>
+                <button
+                  onClick={handleCloseModal}
+                  className="text-gray-500 hover:text-gray-700"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path>
+                  </svg>
+                </button>
+              </div>
+
+              {/* Connected Semesters */}
+              <div className="mb-6">
+                <h3 className="text-lg font-medium mb-2">Connected Semesters</h3>
+                {loadingConnections ? (
+                  <div className="text-center py-4">Loading connections...</div>
+                ) : connectedSemesters.length === 0 ? (
+                  <p className="text-gray-500">No semesters connected to this university</p>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                    {connectedSemesters.map((connection) => (
+                      <div key={connection.id} className="border rounded p-3 flex justify-between items-center">
+                        <div className="flex items-center">
+                          <span>{connection.semester?.name}</span>
+                        </div>
+                        <button
+                          onClick={() => removeSemesterConnection(connection.id, selectedUniversity.id)}
+                          className="text-red-500 hover:text-red-700"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Available Semesters */}
+              <div>
+                <h3 className="text-lg font-medium mb-2">Available Semesters</h3>
+                {loadingSemesters ? (
+                  <div className="text-center py-4">Loading semesters...</div>
+                ) : semesters.length === 0 ? (
+                  <p className="text-gray-500">No available semesters</p>
+                ) : (
+                  <>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mb-4 max-h-60 overflow-y-auto">
+                      {semesters
+                        .filter(semester => !connectedSemesters.some(cs => cs.semester.id === semester.id))
+                        .map(semester => (
+                          <div key={semester.id} className="border rounded p-3 flex items-center">
+                            <input
+                              type="checkbox"
+                              id={`semester-${semester.id}`}
+                              checked={selectedSemesters.includes(semester.id)}
+                              onChange={() => handleSemesterSelection(semester.id)}
+                              className="mr-2"
+                            />
+                            <label htmlFor={`semester-${semester.id}`} className="flex items-center cursor-pointer">
+                              <span>{semester.name}</span>
+                            </label>
+                          </div>
+                        ))}
+                    </div>
+                    <button
+                      onClick={handleConnectSemesters}
+                      disabled={selectedSemesters.length === 0}
+                      className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      Connect Selected Semesters
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
