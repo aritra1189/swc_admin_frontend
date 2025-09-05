@@ -1,7 +1,5 @@
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
-import { SubjectProvider } from './context/SubjectContext';
-import { SyllabusProvider } from './context/SyllabusContext';
-import { AuditLogProvider } from './context/AuditLogContext';
+
 import DashboardLayout from './components/DashboardLayout';
 import LoginPage from './components/Login';
 import ProtectedRoute from './components/ProtectecRoute';
