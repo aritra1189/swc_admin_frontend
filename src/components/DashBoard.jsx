@@ -46,16 +46,10 @@ import FacultyArea from "./FacultyArea";
 import AllFaculty from "./AllFaculty";
 import UserManagement from "../pages/UserManagement";
 import SubjectLectureMaster from "../pages/SubjectLectureMaster";
-import { LibraryProvider } from "../context/LibraryContext";
 // import DigitalLibrary from "../pages/DigitalLibrary";
 // import TestManager from "../pages/TestManager";
-import { TestProvider } from "../context/TestContext";
-import { QuestionBankProvider } from "../context/QuestionBankContext";
 import { QuestionBank } from "../pages/QuestionBank";
 import ChapterSyllabusManager from "../pages/ChapterSyllabusManager";
-import { SubjectProvider } from "../context/SubjectContext";
-import { SyllabusProvider } from "../context/SyllabusContext";
-import { CouponProvider } from "../context/CouponContext";
 import { usersData } from "../pages/mockUsers";
 import CouponManager from "../pages/CouponManager";
 import NoticeBoardManager from "../pages/NoticeBoard";
@@ -79,7 +73,6 @@ import University from "../pages/University";
 import Semester from "../pages/Semester";
 import SubjectMaster from "../pages/Subjects";
 import Subject_connection from "../pages/Subject_connection";
-import { AuthProvider } from "../context/AuthContext";
 import Pages from "../pages/Pages";
 import EducationalContentPage from "../pages/Educationalcontent";
 // import UnitsofSubjects  from "../pages/UnitsofSubjects";
@@ -90,8 +83,6 @@ import QuestionManager from "../pages/QuestionManager";
 import Examtypes from "../pages/Examtypes";
 import ExamManagement from "../pages/Examslist";
 import Menu_permission from "../pages/Menu_permission";
-// ADD THIS IMPORT
-
 
 const totalCourses = 4;
 const totalLectures = 1;
@@ -531,63 +522,19 @@ export default function DashboardPage() {
           <Route path="/university" element={<University />} />
           <Route path="/semester" element={<Semester />} />
           <Route path="/subject" element={<SubjectMaster />} />
-          
-          
-          <Route path="/subject-connection" element={
-            <SubjectProvider>
-              <Subject_connection />
-            </SubjectProvider>
-          } />
-          <Route path="/subject-lecture" element={
-            <TestProvider>
-              <QuestionBankProvider>
-                <SubjectLectureMaster />
-              </QuestionBankProvider>
-            </TestProvider>
-          } />
-          {/* <Route path="/unitsofsubjects" element={<UnitsofSubjects />} /> */}
-          {/* <Route path="/library" element={
-            <AuthProvider>
-              <LibraryProvider>
-                <DigitalLibrary user={user} />
-              </LibraryProvider>
-            </AuthProvider>
-          } /> */}
-          <Route path="/tests" element={
-            <TestProvider>
-              <McqTestManager />
-            </TestProvider>
-          } />
-          <Route path="/add-question" element={
-            <QuestionBankProvider>
-              <QuestionManager/>
-            </QuestionBankProvider>
-          } />
-          <Route path="/chapter-syllabus" element={
-            <SubjectProvider>
-              <SyllabusProvider>
-                <ChapterSyllabusManager />
-              </SyllabusProvider>
-            </SubjectProvider>
-          } />
+          <Route path="/subject-connection" element={<Subject_connection />} />
+          <Route path="/subject-lecture" element={<SubjectLectureMaster />} />
+          <Route path="/tests" element={<McqTestManager />} />
+          <Route path="/add-question" element={<QuestionManager/>} />
+          <Route path="/chapter-syllabus" element={<ChapterSyllabusManager />} />
           <Route path="/notice-board" element={<NoticeBoardManager />} />
           <Route path="/banners" element={<BannerManagementPage />} />
           <Route path="/faqs" element={<FaqManager />} />
           <Route path="/contact-us" element={<ContactUsAdmin />} />
           <Route path="/feedback" element={<AdminFeedback />} />
-          <Route path="/news-management" element={
-            <AuthProvider>
-              <NewsManagement />
-            </AuthProvider>} />
-          <Route path="/notification-manager" element={
-            <AuthProvider>
-              <NotificationManager />
-            </AuthProvider>} />
-          <Route path="/coupons" element={
-            <CouponProvider>
-              <CouponManager />
-            </CouponProvider> 
-          } />
+          <Route path="/news-management" element={<NewsManagement />} />
+          <Route path="/notification-manager" element={<NotificationManager />} />
+          <Route path="/coupons" element={<CouponManager />} />
           <Route path="/student-reports" element={<StudentPerformanceReports />} />
           <Route path="/audit-logs" element={<AuditLogs />} />
           <Route path="/exam-types" element={<Examtypes />}/>
