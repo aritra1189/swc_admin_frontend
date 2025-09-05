@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useAuditLog } from '../context/AuditLogContext';
+import { useAuditLog } from '../context/AuditLogcontext';
 import { format } from 'date-fns';
 
 export default function AuditLogs() {
