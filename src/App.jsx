@@ -16,9 +16,6 @@ function App() {
   }, []);
 
   return (
-    <SubjectProvider>
-      <SyllabusProvider>
-        <AuditLogProvider>
           <Router>
             <Routes>
               <Route path="/login" element={<LoginPage />} />
@@ -30,9 +27,7 @@ function App() {
             </Routes>
             <ToastContainer position="top-right" autoClose={3000} />
           </Router>
-        </AuditLogProvider>
-      </SyllabusProvider>
-    </SubjectProvider>
+        
   );
 }
 
