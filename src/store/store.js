@@ -4,7 +4,7 @@ import authReducer from './authSlice';
 import subjectReducer from './subjects/subjectSlice';
 import audioLectureReducer from './AudioLectureslice';
 import mcqTestReducer from './McqTestSlice'
-import questionsReducer from './Questionslice'
+import questionsReducer from './QuestionSlice'
 import courseReducer from './CourseSlice'
 import boardReducer from './Boardsslice';
 import gradeReducer from './gradeslice';
