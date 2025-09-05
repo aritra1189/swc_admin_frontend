@@ -9,7 +9,7 @@ import {
   searchCourses,
   setFilters,
   setThumbnailUpdating,
-} from '../store/courseSlice';
+} from '../store/Courseslice';
 import { uploadImage } from '../config/imageUpload';
 
 const CourseManager = () => {
