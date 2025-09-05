@@ -14,7 +14,7 @@ import {
   removeStreamConnection,
   setPaginationStatus,
   setPaginationOffset
-} from "../store/gradeSlice";
+} from "../store/gradeslice";
 
 export default function AdminGradeManagement() {
   const dispatch = useDispatch();
