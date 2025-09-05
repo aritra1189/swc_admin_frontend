@@ -1,179 +1,72 @@
 // src/pages/AdminDegreeManagement.jsx
-import React, { useState, useEffect } from "react";
-import axios from "axios";
+import React, { useState, useEffect, useCallback } from "react";
+import { useDispatch, useSelector } from "react-redux";
 import { toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
-import { API_BASE_URL } from "../config/api";
+
+// Import Redux actions and selectors
+import {
+  fetchDegrees,
+  createDegree,
+  updateDegree,
+  updateDegreeStatus,
+  fetchAllUniversities,
+  fetchConnectedUniversities,
+  connectUniversitiesToDegree,
+  removeUniversityConnection,
+  selectDegrees,
+  selectPagination,
+  selectUniversities,
+  selectConnectedUniversities,
+  selectLoading,
+  selectLoadingUniversities,
+  selectLoadingConnections,
+  resetDegreeState,
+  updatePagination
+} from "../store/degreeSlice";
 
 export default function AdminDegreeManagement() {
-  const [degrees, setDegrees] = useState([]);
+  const dispatch = useDispatch();
+  
+  // Select state from Redux store
+  const degrees = useSelector(selectDegrees);
+  const pagination = useSelector(selectPagination);
+  const universities = useSelector(selectUniversities);
+  const connectedUniversities = useSelector(selectConnectedUniversities);
+  const loading = useSelector(selectLoading);
+  const loadingUniversities = useSelector(selectLoadingUniversities);
+  const loadingConnections = useSelector(selectLoadingConnections);
+  
+  // Local component state
   const [name, setName] = useState("");
   const [editId, setEditId] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [pagination, setPagination] = useState({
-    limit: 10,
-    offset: 0,
-    total: 0,
-    status: "ACTIVE"
-  });
   const [selectedDegree, setSelectedDegree] = useState(null);
-  const [universities, setUniversities] = useState([]);
-  const [connectedUniversities, setConnectedUniversities] = useState([]);
   const [showUniversityModal, setShowUniversityModal] = useState(false);
   const [selectedUniversities, setSelectedUniversities] = useState([]);
-  const [loadingUniversities, setLoadingUniversities] = useState(false);
-  const [loadingConnections, setLoadingConnections] = useState(false);
 
-  const token = localStorage.getItem("token");
-
-  // ------------------------
-  // Axios API Functions
-  // ------------------------
-
-  // GET: Get Degree List
-  const fetchDegrees = async () => {
-    try {
-      setLoading(true);
-      const response = await axios.get(`${API_BASE_URL}/degree/list`, {
-        headers: { Authorization: `Bearer ${token}` },
-        params: {
-          limit: pagination.limit,
-          offset: pagination.offset,
-          status: pagination.status,
-          keyword: ""
-        }
-      });
-      setDegrees(response.data.result || []);
-      setPagination(prev => ({ ...prev, total: response.data.total || 0 }));
-    } catch (error) {
-      toast.error(error.response?.data?.message || "Failed to fetch degrees");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // POST: Create Degree
-  const createDegree = async (name) => {
-    try {
-      const response = await axios.post(
-        `${API_BASE_URL}/degree`,
-        { name },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      toast.success("Degree created successfully");
-      return response.data;
-    } catch (error) {
-      toast.error(error.response?.data?.message || "Failed to create degree");
-      throw error;
-    }
-  };
-
-  // PATCH: Update Degree
-  const updateDegree = async (id, name) => {
-    try {
-      await axios.patch(
-        `${API_BASE_URL}/degree/${id}`,
-        { name },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      toast.success("Degree updated successfully");
-    } catch (error) {
-      toast.error(error.response?.data?.message || "Failed to update degree");
-      throw error;
-    }
-  };
-
-  // PUT: Update Degree Status
-  const updateDegreeStatus = async (id, currentStatus) => {
-    const newStatus = currentStatus === "ACTIVE" ? "DEACTIVE" : "ACTIVE";
-    try {
-      await axios.put(
-        `${API_BASE_URL}/degree/status/${id}`,
-        { status: newStatus },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      toast.success(`Status updated to ${newStatus}`);
-    } catch (error) {
-      toast.error(error.response?.data?.message || "Failed to update status");
-      throw error;
-    }
-  };
-
-  // GET: Fetch all active universities
-  const fetchAllUniversities = async () => {
-    try {
-      setLoadingUniversities(true);
-      const response = await axios.get(`${API_BASE_URL}/university/list`, {
-        headers: { Authorization: `Bearer ${token}` },
-        params: {
-          status: "ACTIVE",
-          limit: 100,
-          offset: 0,
-          keyword: ""
-        }
-      });
-      setUniversities(response.data.result || []);
-    } catch (error) {
-      toast.error(error.response?.data?.message || "Failed to fetch universities");
-    } finally {
-      setLoadingUniversities(false);
-    }
-  };
-
-  // GET: Fetch connected universities for a degree
-  const fetchConnectedUniversities = async (degreeId) => {
-    try {
-      setLoadingConnections(true);
-      const response = await axios.get(`${API_BASE_URL}/degree-university/${degreeId}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      setConnectedUniversities(response.data.result || []);
-    } catch (error) {
-      toast.error(error.response?.data?.message || "Failed to fetch university connections");
-    } finally {
-      setLoadingConnections(false);
-    }
-  };
-
-  // POST: Connect universities to degree
-  const connectUniversitiesToDegree = async (degreeId, universityIds) => {
-    try {
-      const promises = universityIds.map(universityId => 
-        axios.post(`${API_BASE_URL}/degree-university`, {
-          degreeId,
-          universityId
-        }, {
-          headers: { Authorization: `Bearer ${token}` }
-        })
-      );
-      
-      await Promise.all(promises);
-      toast.success("Universities connected successfully");
-      fetchConnectedUniversities(degreeId);
-    } catch (error) {
-      toast.error(error.response?.data?.message || "Failed to connect universities");
-    }
-  };
-
-  // DELETE: Remove university connection
-  const removeUniversityConnection = async (connectionId, degreeId) => {
-    try {
-      await axios.delete(`${API_BASE_URL}/degree-university/remove/${connectionId}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      toast.success("Connection removed successfully");
-      fetchConnectedUniversities(degreeId);
-    } catch (error) {
-      toast.error(error.response?.data?.message || "Failed to remove connection");
-    }
-  };
+  // Memoized fetch function to prevent infinite re-renders
+  const fetchDegreesData = useCallback(() => {
+    dispatch(fetchDegrees({
+      limit: pagination.limit,
+      offset: pagination.offset,
+      status: pagination.status,
+      keyword: ""
+    }));
+  }, [dispatch, pagination.limit, pagination.offset, pagination.status]);
 
   // ------------------------
   // Component Logic
   // ------------------------
   useEffect(() => {
-    fetchDegrees();
-  }, [pagination.offset, pagination.status]);
+    fetchDegreesData();
+  }, [fetchDegreesData]);
+
+  useEffect(() => {
+    // Cleanup on component unmount
+    return () => {
+      dispatch(resetDegreeState());
+    };
+  }, [dispatch]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -184,14 +77,14 @@ export default function AdminDegreeManagement() {
 
     try {
       if (editId) {
-        await updateDegree(editId, name);
+        await dispatch(updateDegree({ id: editId, name })).unwrap();
         setEditId(null);
       } else {
-        await createDegree(name);
+        await dispatch(createDegree({ name })).unwrap();
       }
 
       setName("");
-      fetchDegrees();
+      fetchDegreesData();
     } catch (error) {
       console.error("Operation failed:", error);
     }
@@ -203,22 +96,22 @@ export default function AdminDegreeManagement() {
   };
 
   const handleStatusToggle = async (id, currentStatus) => {
-    await updateDegreeStatus(id, currentStatus);
-    fetchDegrees();
+    await dispatch(updateDegreeStatus({ id, currentStatus })).unwrap();
+    fetchDegreesData();
   };
 
   const handlePageChange = (newOffset) => {
-    setPagination(prev => ({ ...prev, offset: newOffset }));
+    dispatch(updatePagination({ offset: newOffset }));
   };
 
   const handleStatusFilter = (status) => {
-    setPagination(prev => ({ ...prev, status, offset: 0 }));
+    dispatch(updatePagination({ status, offset: 0 }));
   };
 
   const handleOpenUniversityModal = async (degree) => {
     setSelectedDegree(degree);
-    await fetchAllUniversities();
-    await fetchConnectedUniversities(degree.id);
+    await dispatch(fetchAllUniversities()).unwrap();
+    await dispatch(fetchConnectedUniversities(degree.id)).unwrap();
     setShowUniversityModal(true);
   };
 
@@ -235,8 +128,18 @@ export default function AdminDegreeManagement() {
       toast.warning("Please select at least one university");
       return;
     }
-    await connectUniversitiesToDegree(selectedDegree.id, selectedUniversities);
+    await dispatch(connectUniversitiesToDegree({
+      degreeId: selectedDegree.id,
+      universityIds: selectedUniversities
+    })).unwrap();
     setSelectedUniversities([]);
+  };
+
+  const handleRemoveUniversityConnection = async (connectionId) => {
+    await dispatch(removeUniversityConnection({
+      connectionId,
+      degreeId: selectedDegree.id
+    })).unwrap();
   };
 
   const handleCloseModal = () => {
@@ -461,7 +364,7 @@ export default function AdminDegreeManagement() {
                           <span>{connection.university?.name}</span>
                         </div>
                         <button
-                          onClick={() => removeUniversityConnection(connection.id, selectedDegree.id)}
+                          onClick={() => handleRemoveUniversityConnection(connection.id)}
                           className="text-red-500 hover:text-red-700"
                         >
                           Remove

@@ -23,13 +23,26 @@ api.interceptors.request.use(
 );
 
 const VideoLectureManagement = () => {
+  const [activeTab, setActiveTab] = useState("subjects"); // 'subjects' or 'courses'
+  
+  // State for subjects
   const [subjects, setSubjects] = useState([]);
-  const [units, setUnits] = useState([]);
+  const [subjectUnits, setSubjectUnits] = useState([]);
   const [filteredSubjects, setFilteredSubjects] = useState([]);
-  const [loading, setLoading] = useState(false);
   const [selectedSubject, setSelectedSubject] = useState("");
-  const [selectedUnit, setSelectedUnit] = useState("");
-  const [videoLectures, setVideoLectures] = useState([]);
+  const [selectedSubjectUnit, setSelectedSubjectUnit] = useState("");
+  const [subjectVideoLectures, setSubjectVideoLectures] = useState([]);
+  
+  // State for courses
+  const [courses, setCourses] = useState([]);
+  const [courseUnits, setCourseUnits] = useState([]);
+  const [filteredCourses, setFilteredCourses] = useState([]);
+  const [selectedCourse, setSelectedCourse] = useState("");
+  const [selectedCourseUnit, setSelectedCourseUnit] = useState("");
+  const [courseVideoLectures, setCourseVideoLectures] = useState([]);
+  
+  // Common states
+  const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
   
   // Form states
@@ -48,8 +61,9 @@ const VideoLectureManagement = () => {
     semester: "",
     degree: "",
     university: "",
-    subjectName: "",
-    accessTypes: ""
+    name: "",
+    accessTypes: "",
+    exam: ""
   });
   
   // Available options for filters
@@ -59,15 +73,18 @@ const VideoLectureManagement = () => {
     semesters: [],
     degrees: [],
     universities: [],
-    subjectNames: []
+    names: [],
+    exams: []
   });
 
-  // Fetch subjects
+  // Fetch subjects and courses
   useEffect(() => {
-    const fetchSubjects = async () => {
+    const fetchData = async () => {
       try {
         setLoading(true);
-        const res = await api.get('/subject/list', {
+        
+        // Fetch subjects
+        const subjectsRes = await api.get('/subject/list', {
           params: {
             limit: 100,
             offset: 0,
@@ -75,18 +92,34 @@ const VideoLectureManagement = () => {
           }
         });
         
-        // Extract subject data from the response
-        const subjectData = res.data?.result || [];
+        const subjectData = subjectsRes.data?.result || [];
         setSubjects(subjectData);
         setFilteredSubjects(subjectData);
         
-        // Extract unique values for filters
-        const grades = [...new Set(subjectData.map(item => item.grade?.name).filter(Boolean))];
-        const streams = [...new Set(subjectData.map(item => item.stream?.name).filter(Boolean))];
-        const semesters = [...new Set(subjectData.map(item => item.semester?.name).filter(Boolean))];
-        const degrees = [...new Set(subjectData.map(item => item.degree?.name).filter(Boolean))];
-        const universities = [...new Set(subjectData.map(item => item.university?.name).filter(Boolean))];
-        const subjectNames = [...new Set(subjectData.map(item => item.subMaster?.name).filter(Boolean))];
+        // Fetch courses
+        const coursesRes = await api.get('/course/admin', {
+          params: {
+            limit: 100,
+            offset: 0,
+            status: 'ACTIVE'
+          }
+        });
+        
+        const courseData = coursesRes.data?.result || [];
+        setCourses(courseData);
+        setFilteredCourses(courseData);
+        
+        // Extract unique values for filters from both subjects and courses
+        const allItems = [...subjectData, ...courseData];
+        const grades = [...new Set(allItems.map(item => item.grade?.name).filter(Boolean))];
+        const streams = [...new Set(allItems.map(item => item.stream?.name).filter(Boolean))];
+        const semesters = [...new Set(allItems.map(item => item.semester?.name).filter(Boolean))];
+        const degrees = [...new Set(allItems.map(item => item.degree?.name).filter(Boolean))];
+        const universities = [...new Set(allItems.map(item => item.university?.name).filter(Boolean))];
+        const names = [...new Set(allItems.map(item => 
+          item.subMaster?.name || item.name
+        ).filter(Boolean))];
+        const exams = [...new Set(allItems.map(item => item.exam?.name).filter(Boolean))];
         
         setFilterOptions({
           grades,
@@ -94,55 +127,107 @@ const VideoLectureManagement = () => {
           semesters,
           degrees,
           universities,
-          subjectNames
+          names,
+          exams
         });
       } catch (err) {
-        console.error("Error fetching subjects:", err);
-        setMessage("Failed to load subjects.");
+        console.error("Error fetching data:", err);
+        setMessage("Failed to load data.");
       } finally {
         setLoading(false);
       }
     };
-    fetchSubjects();
+    fetchData();
   }, []);
 
-  // Apply filters to subjects
+  // Apply filters to subjects or courses based on active tab
   useEffect(() => {
-    let filtered = [...subjects];
-    
-    if (filters.grade) {
-      filtered = filtered.filter(item => item.grade?.name === filters.grade);
+    if (activeTab === "subjects") {
+      let filtered = [...subjects];
+      
+      if (filters.grade) {
+        filtered = filtered.filter(item => item.grade?.name === filters.grade);
+      }
+      
+      if (filters.stream) {
+        filtered = filtered.filter(item => item.stream?.name === filters.stream);
+      }
+      
+      if (filters.semester) {
+        filtered = filtered.filter(item => item.semester?.name === filters.semester);
+      }
+      
+      if (filters.degree) {
+        filtered = filtered.filter(item => item.degree?.name === filters.degree);
+      }
+      
+      if (filters.university) {
+        filtered = filtered.filter(item => item.university?.name === filters.university);
+      }
+      
+      if (filters.name) {
+        filtered = filtered.filter(item => item.subMaster?.name === filters.name);
+      }
+      
+      if (filters.exam) {
+        filtered = filtered.filter(item => item.exam?.name === filters.exam);
+      }
+      
+      setFilteredSubjects(filtered);
+    } else {
+      let filtered = [...courses];
+      
+      if (filters.grade) {
+        filtered = filtered.filter(item => item.grade?.name === filters.grade);
+      }
+      
+      if (filters.stream) {
+        filtered = filtered.filter(item => item.stream?.name === filters.stream);
+      }
+      
+      if (filters.semester) {
+        filtered = filtered.filter(item => item.semester?.name === filters.semester);
+      }
+      
+      if (filters.degree) {
+        filtered = filtered.filter(item => item.degree?.name === filters.degree);
+      }
+      
+      if (filters.university) {
+        filtered = filtered.filter(item => item.university?.name === filters.university);
+      }
+      
+      if (filters.name) {
+        filtered = filtered.filter(item => item.name === filters.name);
+      }
+      
+      if (filters.exam) {
+        filtered = filtered.filter(item => item.exam?.name === filters.exam);
+      }
+      
+      setFilteredCourses(filtered);
     }
-    
-    if (filters.stream) {
-      filtered = filtered.filter(item => item.stream?.name === filters.stream);
-    }
-    
-    if (filters.semester) {
-      filtered = filtered.filter(item => item.semester?.name === filters.semester);
-    }
-    
-    if (filters.degree) {
-      filtered = filtered.filter(item => item.degree?.name === filters.degree);
-    }
-    
-    if (filters.university) {
-      filtered = filtered.filter(item => item.university?.name === filters.university);
-    }
-    
-    if (filters.subjectName) {
-      filtered = filtered.filter(item => item.subMaster?.name === filters.subjectName);
-    }
-    
-    setFilteredSubjects(filtered);
-  }, [filters, subjects]);
+  }, [filters, subjects, courses, activeTab]);
 
-  // Fetch units for a subject
-  const fetchUnits = async (subjectId) => {
+  // Fetch units for a subject or course
+  const fetchUnits = async (id) => {
     try {
       setLoading(true);
-      const res = await api.get(`/unit/list?subjectId=${subjectId}&limit=100&offset=0`);
-      setUnits(res.data?.result || []);
+      let endpoint = '';
+      
+      if (activeTab === "subjects") {
+        endpoint = `/unit/list?subjectId=${id}&limit=100&offset=0`;
+      } else {
+        endpoint = `/unit/list?courseId=${id}&limit=100&offset=0`;
+      }
+      
+      const res = await api.get(endpoint);
+      
+      if (activeTab === "subjects") {
+        setSubjectUnits(res.data?.result || []);
+      } else {
+        setCourseUnits(res.data?.result || []);
+      }
     } catch (err) {
       console.error("Error fetching units:", err);
       setMessage("Failed to load units.");
@@ -160,7 +245,12 @@ const VideoLectureManagement = () => {
       if (accessTypeFilter) params.accessTypes = accessTypeFilter;
       
       const res = await api.get('/video-lecture/list', { params });
-      setVideoLectures(res.data?.result || []);
+      
+      if (activeTab === "subjects") {
+        setSubjectVideoLectures(res.data?.result || []);
+      } else {
+        setCourseVideoLectures(res.data?.result || []);
+      }
     } catch (err) {
       console.error("Error fetching video lectures:", err);
       setMessage("Failed to load video lectures.");
@@ -172,22 +262,35 @@ const VideoLectureManagement = () => {
   // Add new video lecture
   const handleAddVideoLecture = async (e) => {
     e.preventDefault();
-    if (!selectedSubject || !selectedUnit || !title.trim() || !videoUrl.trim()) {
+    
+    const selectedId = activeTab === "subjects" ? selectedSubject : selectedCourse;
+    const selectedUnit = activeTab === "subjects" ? selectedSubjectUnit : selectedCourseUnit;
+    
+    if (!selectedId || !selectedUnit || !title.trim() || !videoUrl.trim()) {
       setMessage("Please fill all required fields.");
       return;
     }
 
     try {
-      await api.post("/video-lecture", {
-        subjectId: selectedSubject,
-        unitId: selectedUnit,
+      const payload = {
         title,
         description,
         videoUrl,
         duration: parseInt(duration) || 0,
         price: accessTypes === "PAID" ? parseFloat(price) : 0,
         accessTypes
-      });
+      };
+      
+      // Add the appropriate ID based on active tab
+      if (activeTab === "subjects") {
+        payload.subjectId = selectedSubject;
+      } else {
+        payload.courseId = selectedCourse;
+      }
+      
+      payload.unitId = selectedUnit;
+      
+      await api.post("/video-lecture", payload);
       setMessage("✅ Video lecture added successfully!");
       resetForm();
       fetchVideoLectures(selectedUnit, filters.accessTypes);
@@ -217,6 +320,8 @@ const VideoLectureManagement = () => {
       setMessage("✅ Video lecture updated successfully!");
       setEditingVideo(null);
       resetForm();
+      
+      const selectedUnit = activeTab === "subjects" ? selectedSubjectUnit : selectedCourseUnit;
       fetchVideoLectures(selectedUnit, filters.accessTypes);
     } catch (err) {
       console.error("Error updating video lecture:", err);
@@ -264,6 +369,8 @@ const VideoLectureManagement = () => {
       });
       
       setMessage("✅ Thumbnail uploaded successfully!");
+      
+      const selectedUnit = activeTab === "subjects" ? selectedSubjectUnit : selectedCourseUnit;
       fetchVideoLectures(selectedUnit, filters.accessTypes);
     } catch (err) {
       console.error("Error uploading thumbnail:", err);
@@ -287,19 +394,28 @@ const VideoLectureManagement = () => {
       semester: "",
       degree: "",
       university: "",
-      subjectName: "",
-      accessTypes: ""
+      name: "",
+      accessTypes: "",
+      exam: ""
     });
   };
 
-  // Format subject display name with all relevant information
-  const formatSubjectName = (subject) => {
-    let name = subject.subMaster.name;
-    if (subject.grade?.name) name += ` - ${subject.grade.name}`;
-    if (subject.stream?.name) name += ` - ${subject.stream.name}`;
-    if (subject.semester?.name) name += ` - ${subject.semester.name}`;
-    if (subject.degree?.name) name += ` - ${subject.degree.name}`;
-    if (subject.university?.name) name += ` - ${subject.university.name}`;
+  // Format display name with all relevant information
+  const formatName = (item) => {
+    let name = "";
+    
+    if (activeTab === "subjects") {
+      name = item.subMaster?.name || "Unnamed Subject";
+    } else {
+      name = item.name || "Unnamed Course";
+    }
+    
+    if (item.grade?.name) name += ` - ${item.grade.name}`;
+    if (item.stream?.name) name += ` - ${item.stream.name}`;
+    if (item.semester?.name) name += ` - ${item.semester.name}`;
+    if (item.degree?.name) name += ` - ${item.degree.name}`;
+    if (item.university?.name) name += ` - ${item.university.name}`;
+    if (item.exam?.name) name += ` - ${item.exam.name}`;
     return name;
   };
 
@@ -316,24 +432,67 @@ const VideoLectureManagement = () => {
     return numericPrice.toFixed(2);
   };
 
+  // Get current video lectures based on active tab
+  const getCurrentVideoLectures = () => {
+    return activeTab === "subjects" ? subjectVideoLectures : courseVideoLectures;
+  };
+
+  // Get current units based on active tab
+  const getCurrentUnits = () => {
+    return activeTab === "subjects" ? subjectUnits : courseUnits;
+  };
+
+  // Get current selected ID based on active tab
+  const getCurrentSelectedId = () => {
+    return activeTab === "subjects" ? selectedSubject : selectedCourse;
+  };
+
+  // Get current selected unit based on active tab
+  const getCurrentSelectedUnit = () => {
+    return activeTab === "subjects" ? selectedSubjectUnit : selectedCourseUnit;
+  };
+
+  // Get current filtered items based on active tab
+  const getCurrentFilteredItems = () => {
+    return activeTab === "subjects" ? filteredSubjects : filteredCourses;
+  };
+
   return (
     <div className="p-6 bg-gray-100 min-h-screen">
       <div className="bg-white shadow rounded-lg p-6 max-w-6xl mx-auto">
         <h2 className="text-2xl font-bold mb-4">Video Lecture Management</h2>
 
+        {/* Tabs for Subjects and Courses */}
+        <div className="flex border-b mb-6">
+          <button
+            className={`py-2 px-4 font-medium ${activeTab === "subjects" ? "border-b-2 border-blue-500 text-blue-600" : "text-gray-500"}`}
+            onClick={() => setActiveTab("subjects")}
+          >
+            Subject Videos
+          </button>
+          <button
+            className={`py-2 px-4 font-medium ${activeTab === "courses" ? "border-b-2 border-blue-500 text-blue-600" : "text-gray-500"}`}
+            onClick={() => setActiveTab("courses")}
+          >
+            Course Videos
+          </button>
+        </div>
+
         {/* Filters Section */}
         <div className="mb-6 p-4 border rounded-lg bg-gray-50">
-          <h3 className="text-lg font-semibold mb-3">Filter Subjects</h3>
+          <h3 className="text-lg font-semibold mb-3">Filter {activeTab === "subjects" ? "Subjects" : "Courses"}</h3>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Subject Name</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                {activeTab === "subjects" ? "Subject Name" : "Course Name"}
+              </label>
               <select
                 className="w-full border border-gray-300 rounded-lg p-2"
-                value={filters.subjectName}
-                onChange={(e) => handleFilterChange('subjectName', e.target.value)}
+                value={filters.name}
+                onChange={(e) => handleFilterChange('name', e.target.value)}
               >
-                <option value="">All Subjects</option>
-                {filterOptions.subjectNames.map((name, index) => (
+                <option value="">All {activeTab === "subjects" ? "Subjects" : "Courses"}</option>
+                {filterOptions.names.map((name, index) => (
                   <option key={index} value={name}>{name}</option>
                 ))}
               </select>
@@ -410,6 +569,20 @@ const VideoLectureManagement = () => {
             </div>
 
             <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Exam</label>
+              <select
+                className="w-full border border-gray-300 rounded-lg p-2"
+                value={filters.exam}
+                onChange={(e) => handleFilterChange('exam', e.target.value)}
+              >
+                <option value="">All Exams</option>
+                {filterOptions.exams.map((exam, index) => (
+                  <option key={index} value={exam}>{exam}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Access Type</label>
               <select
                 className="w-full border border-gray-300 rounded-lg p-2"
@@ -433,35 +606,46 @@ const VideoLectureManagement = () => {
           </div>
         </div>
 
-        {/* Subject and Unit Selection */}
+        {/* Subject/Course and Unit Selection */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Select Subject
+              Select {activeTab === "subjects" ? "Subject" : "Course"}
             </label>
             <select
               className="w-full border border-gray-300 rounded-lg p-2"
-              value={selectedSubject}
+              value={getCurrentSelectedId()}
               onChange={(e) => {
-                setSelectedSubject(e.target.value);
-                setSelectedUnit("");
-                setVideoLectures([]);
+                if (activeTab === "subjects") {
+                  setSelectedSubject(e.target.value);
+                  setSelectedSubjectUnit("");
+                  setSubjectVideoLectures([]);
+                } else {
+                  setSelectedCourse(e.target.value);
+                  setSelectedCourseUnit("");
+                  setCourseVideoLectures([]);
+                }
+                
                 if (e.target.value) {
                   fetchUnits(e.target.value);
                 } else {
-                  setUnits([]);
+                  if (activeTab === "subjects") {
+                    setSubjectUnits([]);
+                  } else {
+                    setCourseUnits([]);
+                  }
                 }
               }}
             >
-              <option value="">-- Select Subject --</option>
-              {filteredSubjects.map((subject) => (
-                <option key={subject.id} value={subject.id}>
-                  {formatSubjectName(subject)}
+              <option value="">-- Select {activeTab === "subjects" ? "Subject" : "Course"} --</option>
+              {getCurrentFilteredItems().map((item) => (
+                <option key={item.id} value={item.id}>
+                  {formatName(item)}
                 </option>
               ))}
             </select>
             <p className="text-sm text-gray-500 mt-1">
-              {filteredSubjects.length} subject(s) found
+              {getCurrentFilteredItems().length} {activeTab === "subjects" ? "subject(s)" : "course(s)"} found
             </p>
           </div>
 
@@ -471,19 +655,28 @@ const VideoLectureManagement = () => {
             </label>
             <select
               className="w-full border border-gray-300 rounded-lg p-2"
-              value={selectedUnit}
+              value={getCurrentSelectedUnit()}
               onChange={(e) => {
-                setSelectedUnit(e.target.value);
+                if (activeTab === "subjects") {
+                  setSelectedSubjectUnit(e.target.value);
+                } else {
+                  setSelectedCourseUnit(e.target.value);
+                }
+                
                 if (e.target.value) {
                   fetchVideoLectures(e.target.value, filters.accessTypes);
                 } else {
-                  setVideoLectures([]);
+                  if (activeTab === "subjects") {
+                    setSubjectVideoLectures([]);
+                  } else {
+                    setCourseVideoLectures([]);
+                  }
                 }
               }}
-              disabled={!selectedSubject}
+              disabled={!getCurrentSelectedId()}
             >
               <option value="">-- Select Unit --</option>
-              {units.map((unit) => (
+              {getCurrentUnits().map((unit) => (
                 <option key={unit.id} value={unit.id}>
                   {unit.name}
                 </option>
@@ -493,10 +686,10 @@ const VideoLectureManagement = () => {
         </div>
 
         {/* Add/Edit Video Lecture Form */}
-        {selectedUnit && (
+        {getCurrentSelectedUnit() && (
           <form onSubmit={editingVideo ? handleUpdateVideoLecture : handleAddVideoLecture} className="mb-6 bg-gray-50 p-4 rounded-lg">
             <h3 className="text-lg font-semibold mb-4">
-              {editingVideo ? 'Edit Video Lecture' : 'Add New Video Lecture'}
+              {editingVideo ? 'Edit Video Lecture' : `Add New Video Lecture to ${activeTab === "subjects" ? "Subject" : "Course"}`}
             </h3>
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
@@ -605,14 +798,14 @@ const VideoLectureManagement = () => {
         )}
 
         {/* Video Lectures List */}
-        {selectedUnit && (
+        {getCurrentSelectedUnit() && (
           <>
             <h3 className="text-lg font-semibold mb-4">Video Lectures</h3>
             {loading ? (
               <p>Loading...</p>
-            ) : videoLectures.length > 0 ? (
+            ) : getCurrentVideoLectures().length > 0 ? (
               <div className="grid gap-4">
-                {videoLectures.map((video) => (
+                {getCurrentVideoLectures().map((video) => (
                   <div key={video.id} className="border p-4 rounded-lg">
                     <div className="flex justify-between items-start mb-3">
                       <div>

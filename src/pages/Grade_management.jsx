@@ -1,179 +1,50 @@
 // src/pages/AdminGradeManagement.jsx
 import React, { useState, useEffect } from "react";
-import axios from "axios";
+import { useSelector, useDispatch } from "react-redux";
 import { toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
-import { API_BASE_URL } from "../config/api";
+import {
+  fetchGrades,
+  createGrade,
+  updateGrade,
+  updateGradeStatus,
+  fetchAllStreams,
+  fetchConnectedStreams,
+  connectStreamsToGrade,
+  removeStreamConnection,
+  setPaginationStatus,
+  setPaginationOffset
+} from "../store/gradeSlice";
 
 export default function AdminGradeManagement() {
-  const [grades, setGrades] = useState([]);
+  const dispatch = useDispatch();
+  const {
+    grades,
+    loading,
+    pagination: reduxPagination,
+    streams,
+    connectedStreams,
+    loadingStreams,
+    loadingConnections
+  } = useSelector((state) => state.grades);
+
   const [name, setName] = useState("");
   const [editId, setEditId] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [pagination, setPagination] = useState({
-    limit: 10,
-    offset: 0,
-    total: 0,
-    status: "ACTIVE"
-  });
   const [selectedGrade, setSelectedGrade] = useState(null);
-  const [streams, setStreams] = useState([]);
-  const [connectedStreams, setConnectedStreams] = useState([]);
   const [showStreamModal, setShowStreamModal] = useState(false);
   const [selectedStreams, setSelectedStreams] = useState([]);
-  const [loadingStreams, setLoadingStreams] = useState(false);
-  const [loadingConnections, setLoadingConnections] = useState(false);
 
   const token = localStorage.getItem("token");
 
-  // ------------------------
-  // Axios API Functions
-  // ------------------------
-
-  // GET: Get Grade List
-  const fetchGrades = async () => {
-    try {
-      setLoading(true);
-      const response = await axios.get(`${API_BASE_URL}/grade/list`, {
-        headers: { Authorization: `Bearer ${token}` },
-        params: {
-          limit: pagination.limit,
-          offset: pagination.offset,
-          status: pagination.status,
-          keyword: ""
-        }
-      });
-      setGrades(response.data.result || []);
-      setPagination(prev => ({ ...prev, total: response.data.total || 0 }));
-    } catch (error) {
-      toast.error(error.response?.data?.message || "Failed to fetch grades");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // POST: Create Grade
-  const createGrade = async (name) => {
-    try {
-      const response = await axios.post(
-        `${API_BASE_URL}/grade`,
-        { name },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      toast.success("Grade created successfully");
-      return response.data;
-    } catch (error) {
-      toast.error(error.response?.data?.message || "Failed to create grade");
-      throw error;
-    }
-  };
-
-  // PATCH: Update Grade
-  const updateGrade = async (id, name) => {
-    try {
-      await axios.patch(
-        `${API_BASE_URL}/grade/${id}`,
-        { name },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      toast.success("Grade updated successfully");
-    } catch (error) {
-      toast.error(error.response?.data?.message || "Failed to update grade");
-      throw error;
-    }
-  };
-
-  // PUT: Update Grade Status
-  const updateGradeStatus = async (id, currentStatus) => {
-    const newStatus = currentStatus === "ACTIVE" ? "DEACTIVE" : "ACTIVE";
-    try {
-      await axios.put(
-        `${API_BASE_URL}/grade/status/${id}`,
-        { status: newStatus },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      toast.success(`Status updated to ${newStatus}`);
-    } catch (error) {
-      toast.error(error.response?.data?.message || "Failed to update status");
-      throw error;
-    }
-  };
-
-  // GET: Fetch all active streams
-  const fetchAllStreams = async () => {
-    try {
-      setLoadingStreams(true);
-      const response = await axios.get(`${API_BASE_URL}/stream/list`, {
-        headers: { Authorization: `Bearer ${token}` },
-        params: {
-          status: "ACTIVE",
-          limit: 100,
-          offset: 0,
-          keyword: ""
-        }
-      });
-      setStreams(response.data.result || []);
-    } catch (error) {
-      toast.error(error.response?.data?.message || "Failed to fetch streams");
-    } finally {
-      setLoadingStreams(false);
-    }
-  };
-
-  // GET: Fetch connected streams for a grade
-  const fetchConnectedStreams = async (gradeId) => {
-    try {
-      setLoadingConnections(true);
-      const response = await axios.get(`${API_BASE_URL}/grade-stream/${gradeId}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      setConnectedStreams(response.data.result || []);
-    } catch (error) {
-      toast.error(error.response?.data?.message || "Failed to fetch stream connections");
-    } finally {
-      setLoadingConnections(false);
-    }
-  };
-
-  // POST: Connect streams to grade
-  const connectStreamsToGrade = async (gradeId, streamIds) => {
-    try {
-      const promises = streamIds.map(streamId => 
-        axios.post(`${API_BASE_URL}/grade-stream`, {
-          gradeId,
-          streamId
-        }, {
-          headers: { Authorization: `Bearer ${token}` }
-        })
-      );
-      
-      await Promise.all(promises);
-      toast.success("Streams connected successfully");
-      fetchConnectedStreams(gradeId);
-    } catch (error) {
-      toast.error(error.response?.data?.message || "Failed to connect streams");
-    }
-  };
-
-  // DELETE: Remove stream connection
-  const removeStreamConnection = async (connectionId, gradeId) => {
-    try {
-      await axios.delete(`${API_BASE_URL}/grade-stream/remove/${connectionId}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      toast.success("Connection removed successfully");
-      fetchConnectedStreams(gradeId);
-    } catch (error) {
-      toast.error(error.response?.data?.message || "Failed to remove connection");
-    }
-  };
-
-  // ------------------------
-  // Component Logic
-  // ------------------------
+  // Fetch grades when pagination changes
   useEffect(() => {
-    fetchGrades();
-  }, [pagination.offset, pagination.status]);
+    dispatch(fetchGrades({
+      limit: reduxPagination.limit,
+      offset: reduxPagination.offset,
+      status: reduxPagination.status,
+      token
+    }));
+  }, [reduxPagination.offset, reduxPagination.status, dispatch, token]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -184,14 +55,20 @@ export default function AdminGradeManagement() {
 
     try {
       if (editId) {
-        await updateGrade(editId, name);
+        await dispatch(updateGrade({ id: editId, name, token })).unwrap();
         setEditId(null);
       } else {
-        await createGrade(name);
+        await dispatch(createGrade({ name, token })).unwrap();
       }
 
       setName("");
-      fetchGrades();
+      // Refresh the list with current filters
+      dispatch(fetchGrades({
+        limit: reduxPagination.limit,
+        offset: reduxPagination.offset,
+        status: reduxPagination.status,
+        token
+      }));
     } catch (error) {
       console.error("Operation failed:", error);
     }
@@ -203,23 +80,44 @@ export default function AdminGradeManagement() {
   };
 
   const handleStatusToggle = async (id, currentStatus) => {
-    await updateGradeStatus(id, currentStatus);
-    fetchGrades();
+    try {
+      await dispatch(updateGradeStatus({ 
+        id, 
+        status: currentStatus === "ACTIVE" ? "DEACTIVE" : "ACTIVE",
+        token 
+      })).unwrap();
+      
+      // Refresh the list with current filters
+      dispatch(fetchGrades({
+        limit: reduxPagination.limit,
+        offset: reduxPagination.offset,
+        status: reduxPagination.status,
+        token
+      }));
+    } catch (error) {
+      console.error("Status update failed:", error);
+    }
   };
 
   const handlePageChange = (newOffset) => {
-    setPagination(prev => ({ ...prev, offset: newOffset }));
+    dispatch(setPaginationOffset(newOffset));
   };
 
   const handleStatusFilter = (status) => {
-    setPagination(prev => ({ ...prev, status, offset: 0 }));
+    // Update the status in Redux and fetch grades with the new status
+    dispatch(setPaginationStatus(status));
+    dispatch(setPaginationOffset(0));
   };
 
   const handleOpenStreamModal = async (grade) => {
     setSelectedGrade(grade);
-    await fetchAllStreams();
-    await fetchConnectedStreams(grade.id);
-    setShowStreamModal(true);
+    try {
+      await dispatch(fetchAllStreams({ token })).unwrap();
+      await dispatch(fetchConnectedStreams({ gradeId: grade.id, token })).unwrap();
+      setShowStreamModal(true);
+    } catch (error) {
+      console.error("Failed to open stream modal:", error);
+    }
   };
 
   const handleStreamSelection = (streamId) => {
@@ -235,8 +133,33 @@ export default function AdminGradeManagement() {
       toast.warning("Please select at least one stream");
       return;
     }
-    await connectStreamsToGrade(selectedGrade.id, selectedStreams);
-    setSelectedStreams([]);
+    
+    try {
+      await dispatch(connectStreamsToGrade({
+        gradeId: selectedGrade.id,
+        streamIds: selectedStreams,
+        token
+      })).unwrap();
+      
+      setSelectedStreams([]);
+      dispatch(fetchConnectedStreams({ gradeId: selectedGrade.id, token }));
+    } catch (error) {
+      console.error("Failed to connect streams:", error);
+    }
+  };
+
+  const handleRemoveConnection = async (connectionId) => {
+    try {
+      await dispatch(removeStreamConnection({
+        connectionId,
+        gradeId: selectedGrade.id,
+        token
+      })).unwrap();
+      
+      dispatch(fetchConnectedStreams({ gradeId: selectedGrade.id, token }));
+    } catch (error) {
+      console.error("Failed to remove connection:", error);
+    }
   };
 
   const handleCloseModal = () => {
@@ -293,7 +216,7 @@ export default function AdminGradeManagement() {
         <button
           onClick={() => handleStatusFilter("ACTIVE")}
           className={`px-4 py-2 rounded ${
-            pagination.status === "ACTIVE" 
+            reduxPagination.status === "ACTIVE" 
               ? "bg-green-500 text-white" 
               : "bg-gray-200"
           }`}
@@ -303,7 +226,7 @@ export default function AdminGradeManagement() {
         <button
           onClick={() => handleStatusFilter("PENDING")}
           className={`px-4 py-2 rounded ${
-            pagination.status === "PENDING" 
+            reduxPagination.status === "PENDING" 
               ? "bg-yellow-500 text-white" 
               : "bg-gray-200"
           }`}
@@ -313,7 +236,7 @@ export default function AdminGradeManagement() {
         <button
           onClick={() => handleStatusFilter("DEACTIVE")}
           className={`px-4 py-2 rounded ${
-            pagination.status === "DEACTIVE" 
+            reduxPagination.status === "DEACTIVE" 
               ? "bg-red-500 text-white" 
               : "bg-gray-200"
           }`}
@@ -345,7 +268,7 @@ export default function AdminGradeManagement() {
                 <tbody className="bg-white divide-y divide-gray-200">
                   {grades.map((grade, index) => (
                     <tr key={grade.id}>
-                      <td className="px-6 py-4 whitespace-nowrap">{pagination.offset + index + 1}</td>
+                      <td className="px-6 py-4 whitespace-nowrap">{reduxPagination.offset + index + 1}</td>
                       <td className="px-6 py-4 whitespace-nowrap font-medium">{grade.name}</td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <span
@@ -393,19 +316,19 @@ export default function AdminGradeManagement() {
             {/* Pagination */}
             <div className="flex justify-between items-center mt-4">
               <div>
-                Showing {pagination.offset + 1} to {Math.min(pagination.offset + pagination.limit, pagination.total)} of {pagination.total} grades
+                Showing {reduxPagination.offset + 1} to {Math.min(reduxPagination.offset + reduxPagination.limit, reduxPagination.total)} of {reduxPagination.total} grades
               </div>
               <div className="flex space-x-2">
                 <button
-                  onClick={() => handlePageChange(Math.max(0, pagination.offset - pagination.limit))}
-                  disabled={pagination.offset === 0}
+                  onClick={() => handlePageChange(Math.max(0, reduxPagination.offset - reduxPagination.limit))}
+                  disabled={reduxPagination.offset === 0}
                   className="px-4 py-2 border rounded disabled:opacity-50"
                 >
                   Previous
                 </button>
                 <button
-                  onClick={() => handlePageChange(pagination.offset + pagination.limit)}
-                  disabled={pagination.offset + pagination.limit >= pagination.total}
+                  onClick={() => handlePageChange(reduxPagination.offset + reduxPagination.limit)}
+                  disabled={reduxPagination.offset + reduxPagination.limit >= reduxPagination.total}
                   className="px-4 py-2 border rounded disabled:opacity-50"
                 >
                   Next
@@ -450,7 +373,7 @@ export default function AdminGradeManagement() {
                           <span>{connection.stream?.name}</span>
                         </div>
                         <button
-                          onClick={() => removeStreamConnection(connection.id, selectedGrade.id)}
+                          onClick={() => handleRemoveConnection(connection.id)}
                           className="text-red-500 hover:text-red-700"
                         >
                           Remove

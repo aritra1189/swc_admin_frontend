@@ -28,19 +28,27 @@ import {
   ClipboardMinus,
   LogOut,
   PhoneCall,
-  Search
+  Search,
+  BookCopy,
+  ListStart,
+  SquareKanban,
+  CircleArrowOutUpLeft,
+  Podcast,
+  Database,
+  Waypoints,
+  Play,
+  Headset,
+  FileText,
+  BookKey
 } from "lucide-react";
 
-import { FacultyArea } from "./FacultyArea";
-import { AllFaculty } from "./AllFaculty";
-// import WBBSEPage from "../pages/WBBSEPage";
-// import HigherSecondary from "../pages/HigherSecondary";
-// import Graduation from "../pages/Graduation";
+import FacultyArea from "./FacultyArea";
+import AllFaculty from "./AllFaculty";
 import UserManagement from "../pages/UserManagement";
 import SubjectLectureMaster from "../pages/SubjectLectureMaster";
 import { LibraryProvider } from "../context/LibraryContext";
-import DigitalLibrary from "../pages/DigitalLibrary";
-import TestManager from "../pages/TestManager";
+// import DigitalLibrary from "../pages/DigitalLibrary";
+// import TestManager from "../pages/TestManager";
 import { TestProvider } from "../context/TestContext";
 import { QuestionBankProvider } from "../context/QuestionBankContext";
 import { QuestionBank } from "../pages/QuestionBank";
@@ -51,7 +59,7 @@ import { CouponProvider } from "../context/CouponContext";
 import { usersData } from "../pages/mockUsers";
 import CouponManager from "../pages/CouponManager";
 import NoticeBoardManager from "../pages/NoticeBoard";
-import { CourseManager } from "../pages/CourseManager";
+import CourseManager from "../pages/CourseManager";
 import StudentPerformanceReports from "../pages/StudentReports";
 import AuditLogs from "../pages/AuditLogs";
 import PaymentsManager from "../pages/PaymentManager";
@@ -74,50 +82,66 @@ import Subject_connection from "../pages/Subject_connection";
 import { AuthProvider } from "../context/AuthContext";
 import Pages from "../pages/Pages";
 import EducationalContentPage from "../pages/Educationalcontent";
-import UnitsofSubjects  from "../pages/UnitsofSubjects";
+// import UnitsofSubjects  from "../pages/UnitsofSubjects";
 import AudioLectureManager from "../pages/AudioLecture";
 import Study_material from "../pages/Study_material";
 import McqTestManager from "../pages/McqTestManager";
 import QuestionManager from "../pages/QuestionManager";
-const totalUsers = usersData.length;
-const activeUsers = usersData.filter(user => user.status === "active").length;
-const inactiveUsers = usersData.filter(user => user.status === "inactive").length;
-// const totalTeachers = 8;
+import Examtypes from "../pages/Examtypes";
+import ExamManagement from "../pages/Examslist";
+import Menu_permission from "../pages/Menu_permission";
+// ADD THIS IMPORT
+
+
 const totalCourses = 4;
 const totalLectures = 1;
 
-const getStats = (bannerCount) => [
+const getStats = (bannerCount, facultyCount, activeStaffCount, inactiveStaffCount, totalUsersCount, activeUsersCount, inactiveUsersCount, totalCoursesCount, totalFeedbackCount, totalNewsCount) => [
   {
     title: "All Users",
-    count: totalUsers,
+    count: totalUsersCount,
     color: "border-red-400 text-red-500",
     icon: <User />,
     path: "/users",
   },
   {
-    title: "Active Membership",
-    count: activeUsers,
+    title: "Active Users",
+    count: activeUsersCount,
     color: "border-green-400 text-green-500",
     icon: <Users />,
     path: "/users?status=active",
   },
   {
-    title: "Pending Member",
-    count: inactiveUsers,
-    color: "border-green-300 text-green-400",
+    title: "Inactive Users",
+    count: inactiveUsersCount,
+    color: "border-red-400 text-red-500",
     icon: <Users />,
     path: "/users?status=inactive",
   },
-  // {
-  //   title: "All Teachers",
-  //   count: totalTeachers,
-  //   color: "border-blue-300 text-blue-500",
-  //   icon: <Laptop />,
-  //   path: "/teachers",
-  // },
+  {
+    title: "Admin & Staff",
+    count: facultyCount,
+    color: "border-blue-300 text-blue-500",
+    icon: <Users />,
+    path: "/faculty/all",
+  },
+  {
+    title: "Active Staff",
+    count: activeStaffCount,
+    color: "border-green-400 text-green-500",
+    icon: <Users />,
+    path: "/faculty/all?status=active",
+  },
+  {
+    title: "Inactive Staff",
+    count: inactiveStaffCount,
+    color: "border-red-400 text-red-500",
+    icon: <Users />,
+    path: "/faculty/all?status=inactive",
+  },
   {
     title: "Total courses",
-    count: totalCourses,
+    count: totalCoursesCount,
     color: "border-yellow-300 text-yellow-500",
     icon: <Home />,
     path: "/courses/show",
@@ -126,7 +150,7 @@ const getStats = (bannerCount) => [
     title: "Total Banners",
     count: bannerCount,
     color: "border-emerald-300 text-emerald-500",
-    icon: <User />,
+    icon: <BookKey />,
     path: "/banners",
   },
   {
@@ -136,41 +160,54 @@ const getStats = (bannerCount) => [
     icon: <User />,
     path: "/lectures",
   },
+  {
+    title: "Total Feedback",
+    count: totalFeedbackCount,
+    color: "border-indigo-300 text-indigo-500",
+    icon: <ShieldCheck />,
+    path: "/feedback",
+  },
+  {
+    title: "Total News",
+    count: totalNewsCount,
+    color: "border-pink-300 text-pink-500",
+    icon: <Newspaper />,
+    path: "/news-management",
+  },
 ];
 
-// const facultyMenuItems = [
-//   { label: "All Faculty", path: "/faculty/all" },
-//   { label: "Add Faculty", path: "/faculty/add" },
-// ];
+const facultyMenuItems = [
+  { label: "All Admin&Staff", path: "/faculty/all" },
+  { label: "Add Admin&Staff", path: "/faculty/add" },
+];
 
 const courseMenuItems = [
   { label: "All Courses", path: "/courses/show" }
 ];
 
 const additionalMenuItems = [
-  {label: "Pages", path: "/pages", icon: <Home size={18} /> },
-  { label: "Levels", path: "/classes", icon: <Laptop size={18} /> },
-  { label: "Boards", path: "/boards", icon: <Settings size={18} /> },
-  { label: "Degree", path: "/Degree", icon: <PcCase size={18} /> },
+  {label: "Pages", path: "/pages", icon: <BookCopy size={18} /> },
+  { label: "Levels", path: "/classes", icon: <ListStart size={18} /> },
+  { label: "Boards", path: "/boards", icon: <SquareKanban size={18} /> },
+  { label: "Degree", path: "/Degree", icon: <CircleArrowOutUpLeft size={18} /> },
   { label: "Grade", path: "/grade-management", icon: <PcCase size={18} /> },
-  { label: "Stream", path: "/stream-management", icon: <Laptop size={18} /> },
+  { label: "Stream", path: "/stream-management", icon: <Podcast size={18} /> },
   { label: "University", path: "/university", icon: <Laptop size={18} /> },
-  { label: "Semester", path: "/semester", icon: <Laptop size={18} /> },
+  { label: "Semester", path: "/semester", icon: <Database size={18} /> },
   { label: "Subjects", path: "/subject", icon: <TvMinimalPlay size={18} /> },
-  { label: "Subject Connection", path: "/subject-connection", icon: <TvMinimalPlay size={18} /> },
-  // { label: "Subject Lectures", path: "/subject-lecture", icon: <TvMinimalPlay size={18} /> },
+  { label: "Subject Connection", path: "/subject-connection", icon: <Waypoints size={18} /> },
   { label: "Video Lectures", path: "/educational-content", icon: <BookOpen size={18} /> },
-  { label: "Audio Lectures", path: "/audio-lectures", icon: <BookOpen size={18} /> },
-  { label: "Study Material", path: "/study-material", icon: <BookOpen size={18} /> },
-  // {label: "Units of Subjects", path: "/unitsofsubjects", icon: <BookOpen size={18} /> },
-  
+  { label: "Audio Lectures", path: "/audio-lectures", icon: <Headset size={18} /> },
+  { label: "Study Material", path: "/study-material", icon: <FileText size={18} /> },
   { label: "Users", path: "/users", icon: <MessageCircle size={18} /> },
-  // { label: "Subjects & Lectures", path: "/subject-lecture", icon: <TvMinimalPlay size={18} /> },
-  { label: "Library", path: "/library", icon: <BookOpen size={18} /> },
+  { label: "Admin & Staff", path: "/faculty", icon: <Users size={18} />, hasDropdown: true },
+  {label: "Menu Permission", path: "/menu-permission", icon: <Users size={18} />},
   { label: "Tests", path: "/tests", icon: <Laptop size={18} /> },
   { label: "Add Question", path: "/add-question", icon: <BadgeQuestionMark size={18} /> },
-  { label: "Chapter Syllabus", path: "/chapter-syllabus", icon: <OctagonPause size={18} /> },
+  { label: "Units", path: "/chapter-syllabus", icon: <OctagonPause size={18} /> },
   { label: "Coupons", path: "/coupons", icon: <BadgePercent size={18} /> },
+  {label: "Exam Types", path: "/exam-types", icon: <Play size={18} />},
+  {label: "Exams", path: "/exams", icon: <Play size={18} />},
   { label: "Notice Board", path: "/notice-board", icon: <SquareMinus size={18} /> },
   { label: "Student Reports", path: "/student-reports", icon: <ClipboardMinus size={18} /> },
   { label: "Audit Logs", path: "/audit-logs", icon: <ShieldCheck size={18} /> },
@@ -188,6 +225,8 @@ export default function DashboardPage() {
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const [facultyList, setFacultyList] = useState([]);
+  const [activeStaffCount, setActiveStaffCount] = useState(0);
+  const [inactiveStaffCount, setInactiveStaffCount] = useState(0);
   const [totalBanners, setTotalBanners] = useState(0);
   const [banners, setBanners] = useState([]);
   const [courseList, setCourseList] = useState(() => {
@@ -196,27 +235,139 @@ export default function DashboardPage() {
   });
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
+  const [totalUsersCount, setTotalUsersCount] = useState(0);
+  const [activeUsersCount, setActiveUsersCount] = useState(0);
+  const [inactiveUsersCount, setInactiveUsersCount] = useState(0);
+  const [totalCoursesCount, setTotalCoursesCount] = useState(0);
+  const [totalFeedbackCount, setTotalFeedbackCount] = useState(0);
+  const [totalNewsCount, setTotalNewsCount] = useState(0);
+
+  // Get token from localStorage
+  const getAuthToken = () => {
+    return localStorage.getItem("token") || "";
+  };
 
   useEffect(() => {
-    const fetchBanners = async () => {
+    const fetchAllStats = async () => {
       try {
-        const res = await axios.get(`${API_BASE_URL}/banner/all`, {});
+        const token = getAuthToken();
         
-        if (res.status === 200 && res.data) {
-          const bannersData = res.data.data || [];
-          const totalCount = res.data.total || bannersData.length;
+        // Fetch banners
+        const bannersRes = await axios.get(`${API_BASE_URL}/banner/all`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        if (bannersRes.status === 200 && bannersRes.data) {
+          const bannersData = bannersRes.data.data || [];
+          const totalCount = bannersRes.data.total || bannersData.length;
           setBanners(bannersData);
           setTotalBanners(totalCount);
-        } else {
-          console.error("Failed to fetch banners:", res.data?.message || "Unknown error");
         }
+
+        // Fetch active staff
+        const activeStaffRes = await axios.get(`${API_BASE_URL}/account/stafflist`, {
+          headers: { Authorization: `Bearer ${token}` },
+          params: {
+            limit: 100,
+            offset: 0,
+            status: "ACTIVE",
+          },
+        });
+        
+        // Fetch inactive staff
+        const inactiveStaffRes = await axios.get(`${API_BASE_URL}/account/stafflist`, {
+          headers: { Authorization: `Bearer ${token}` },
+          params: {
+            limit: 100,
+            offset: 0,
+            status: "DEACTIVE",
+          },
+        });
+
+        if (activeStaffRes.status === 200 && activeStaffRes.data && inactiveStaffRes.status === 200 && inactiveStaffRes.data) {
+          const activeStaffData = activeStaffRes.data.result || [];
+          const inactiveStaffData = inactiveStaffRes.data.result || [];
+          const allStaff = [...activeStaffData, ...inactiveStaffData];
+          
+          setFacultyList(allStaff);
+          setActiveStaffCount(activeStaffData.length);
+          setInactiveStaffCount(inactiveStaffData.length);
+        }
+
+        // Fetch active users
+        const activeUsersRes = await axios.get(`${API_BASE_URL}/account/users`, {
+          headers: { Authorization: `Bearer ${token}` },
+          params: {
+            limit: 1,
+            offset: 0,
+            status: "ACTIVE",
+          },
+        });
+        
+        // Fetch inactive users
+        const inactiveUsersRes = await axios.get(`${API_BASE_URL}/account/users`, {
+          headers: { Authorization: `Bearer ${token}` },
+          params: {
+            limit: 1,
+            offset: 0,
+            status: "DEACTIVE",
+          },
+        });
+
+        if (activeUsersRes.status === 200 && activeUsersRes.data && inactiveUsersRes.status === 200 && inactiveUsersRes.data) {
+          setActiveUsersCount(activeUsersRes.data.total || 0);
+          setInactiveUsersCount(inactiveUsersRes.data.total || 0);
+          setTotalUsersCount((activeUsersRes.data.total || 0) + (inactiveUsersRes.data.total || 0));
+        }
+
+        // Fetch total courses count
+        const coursesRes = await axios.get(`${API_BASE_URL}/course/admin`, {
+          headers: { Authorization: `Bearer ${token}` },
+          params: {
+            limit: 10,
+            offset: 0,
+          },
+        });
+        if (coursesRes.status === 200 && coursesRes.data) {
+          setTotalCoursesCount(coursesRes.data.total || 0);
+        }
+
+        // Fetch total feedback count
+        const feedbackRes = await axios.get(`${API_BASE_URL}/rating-feedback/list`, {
+          headers: { Authorization: `Bearer ${token}` },
+          params: {
+            limit: 1,
+            offset: 0,
+            status:true
+          },
+        });
+        if (feedbackRes.status === 200 && feedbackRes.data) {
+          setTotalFeedbackCount(feedbackRes.data.total || 0);
+        }
+
+        // Fetch total news count
+        const newsRes = await axios.get(`${API_BASE_URL}/news/list`, {
+          headers: { Authorization: `Bearer ${token}` },
+          params: {
+            limit: 10,
+            offset: 0,
+            
+          },
+        });
+        if (newsRes.status === 200 && newsRes.data) {
+          setTotalNewsCount(newsRes.data.total || 0);
+        }
+
       } catch (error) {
-        console.error("Error fetching banners:", error.message);
+        console.error("Error fetching stats:", error.message);
+        if (error.response && error.response.status === 401) {
+          dispatch(logoutUser());
+          navigate("/login");
+        }
       }
     };
 
-    fetchBanners();
-  }, []);
+    fetchAllStats();
+  }, [dispatch, navigate]);
 
   useEffect(() => {
     localStorage.setItem("courseList", JSON.stringify(courseList));
@@ -282,8 +433,7 @@ export default function DashboardPage() {
 
       {/* Sidebar */}
       <aside className="w-68 bg-gradient-to-b from-blue-50 to-white border-r shadow-md flex flex-col">
-        {/* <div className="text-3xl font-bold p-6 text-blue-800 tracking-wide">SWC</div> */}
-        <img src={swcLogo} alt="SWC Logo" className="w-24 h-24 mx-auto mt-4 mb-2" />
+        <img src={swcLogo} alt="SWC Logo" className="w-36 h-36 mx-auto mt-4 mb-2 rounded-full object-cover"/>
         <div className="px-4 pb-3">
           <div className="relative">
             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -309,8 +459,16 @@ export default function DashboardPage() {
                 key={item.path} 
                 icon={item.icon} 
                 label={item.label} 
-                onClick={() => navigate(item.path)} 
-              />
+                onClick={item.hasDropdown ? undefined : () => navigate(item.path)}
+                hasDropdown={item.hasDropdown}
+              >
+                {item.hasDropdown && (
+                  <>
+                    <DropdownItem label="All Admin & Staff" onClick={() => navigate("/faculty/all")} />
+                    <DropdownItem label="Add Admin & Staff" onClick={() => navigate("/faculty/add")} />
+                  </>
+                )}
+              </SidebarItem>
             ))}
             
             {filteredMenuItems.length === 0 && (
@@ -342,13 +500,26 @@ export default function DashboardPage() {
       {/* Main Content */}
       <main className="flex-1 bg-gray-100 p-6 overflow-y-auto">
         <Routes>
-          <Route path="/" element={<OverviewSection totalBanners={totalBanners} />} />
+          <Route path="/" element={<OverviewSection 
+            totalBanners={totalBanners} 
+            facultyCount={facultyList.length} 
+            activeStaffCount={activeStaffCount}
+            inactiveStaffCount={inactiveStaffCount}
+            totalUsersCount={totalUsersCount}
+            activeUsersCount={activeUsersCount}
+            inactiveUsersCount={inactiveUsersCount}
+            totalCoursesCount={totalCoursesCount}
+            totalFeedbackCount={totalFeedbackCount}
+            totalNewsCount={totalNewsCount}
+          />} />
           <Route path="/pages" element={<Pages />} />
           <Route path="/classes" element={<ClassesPage />} />
           <Route path="/boards" element={<AdminBoardManagement />} />
           <Route path="/users" element={<UserManagement />} />
-          <Route path="/faculty/all" element={<AllFaculty facultyList={facultyList} />} />
-          {/* <Route path="/faculty/add" element={<FacultyArea facultyList={facultyList} setFacultyList={setFacultyList} />} /> */}
+          <Route path="/faculty/all" element={<AllFaculty facultyList={facultyList} setFacultyList={setFacultyList} />} />
+          <Route path="/faculty/add" element={<FacultyArea facultyList={facultyList} setFacultyList={setFacultyList} />} />
+          {/* UPDATED ROUTE FOR PERMISSIONS */}
+          <Route path="/menu-permission/:accountId" element={<Menu_permission />} />
           <Route path="/courses/show" element={<CourseManager courseList={courseList} setCourseList={setCourseList} />} />
           <Route path="/courses/add" element={<PlaceholderPage page="Add Course" />} />
           <Route path="/degree" element={<AdminDegreeManagement />} />
@@ -359,11 +530,9 @@ export default function DashboardPage() {
           <Route path="/study-material" element={<Study_material />} />
           <Route path="/university" element={<University />} />
           <Route path="/semester" element={<Semester />} />
-          <Route path="/subject" element={
-            // <SubjectProvider>
-              <SubjectMaster />
-            // </SubjectProvider>
-          } />
+          <Route path="/subject" element={<SubjectMaster />} />
+          
+          
           <Route path="/subject-connection" element={
             <SubjectProvider>
               <Subject_connection />
@@ -376,17 +545,14 @@ export default function DashboardPage() {
               </QuestionBankProvider>
             </TestProvider>
           } />
-          <Route path="/unitsofsubjects" element={
-            <UnitsofSubjects />
-          } />
-          <Route path="/library" element={
+          {/* <Route path="/unitsofsubjects" element={<UnitsofSubjects />} /> */}
+          {/* <Route path="/library" element={
             <AuthProvider>
               <LibraryProvider>
-              <DigitalLibrary user={user} />
-            </LibraryProvider>
+                <DigitalLibrary user={user} />
+              </LibraryProvider>
             </AuthProvider>
-            
-          } />
+          } /> */}
           <Route path="/tests" element={
             <TestProvider>
               <McqTestManager />
@@ -404,17 +570,6 @@ export default function DashboardPage() {
               </SyllabusProvider>
             </SubjectProvider>
           } />
-          {/* <Route path="/secondary/wbbse" element={<WBBSEPage boardName="WBBSE" />} />
-          <Route path="/secondary/cbse" element={<WBBSEPage boardName="CBSE" />} />
-          <Route path="/secondary/icse" element={<WBBSEPage boardName="ICSE" />} />
-          <Route path="/highersecondary/wbchse" element={<HigherSecondary boardName="WBCHSE" />} />
-          <Route path="/highersecondary/cbse" element={<HigherSecondary boardName="CBSE" />} />
-          <Route path="/highersecondary/ise" element={<HigherSecondary boardName="ISE" />} />
-          <Route path="/graduation/BA" element={<Graduation UNIVERSITY="B.A" />} />
-          <Route path="/graduation/BCOM" element={<Graduation UNIVERSITY="B.COM" />} />
-          <Route path="/graduation/BSC" element={<Graduation UNIVERSITY="B.SC" />} />
-          <Route path="/graduation/BCA" element={<Graduation UNIVERSITY="BCA" />} />
-          <Route path="/graduation/BTECH" element={<Graduation UNIVERSITY="B.TECH" />} /> */}
           <Route path="/notice-board" element={<NoticeBoardManager />} />
           <Route path="/banners" element={<BannerManagementPage />} />
           <Route path="/faqs" element={<FaqManager />} />
@@ -422,11 +577,11 @@ export default function DashboardPage() {
           <Route path="/feedback" element={<AdminFeedback />} />
           <Route path="/news-management" element={
             <AuthProvider>
-            <NewsManagement />
+              <NewsManagement />
             </AuthProvider>} />
           <Route path="/notification-manager" element={
             <AuthProvider>
-            <NotificationManager />
+              <NotificationManager />
             </AuthProvider>} />
           <Route path="/coupons" element={
             <CouponProvider>
@@ -435,6 +590,8 @@ export default function DashboardPage() {
           } />
           <Route path="/student-reports" element={<StudentPerformanceReports />} />
           <Route path="/audit-logs" element={<AuditLogs />} />
+          <Route path="/exam-types" element={<Examtypes />}/>
+          <Route path="/exams" element={<ExamManagement />} />
           <Route path="/payments" element={<PaymentsManager />} />
           <Route path="*" element={<PlaceholderPage page="404 - Not Found" />} />
         </Routes>
@@ -443,7 +600,7 @@ export default function DashboardPage() {
   );
 }
 
-function OverviewSection({ totalBanners }) {
+function OverviewSection({ totalBanners, facultyCount, activeStaffCount, inactiveStaffCount, totalUsersCount, activeUsersCount, inactiveUsersCount, totalCoursesCount, totalFeedbackCount, totalNewsCount }) {
   const navigate = useNavigate();
   
   return (
@@ -451,7 +608,7 @@ function OverviewSection({ totalBanners }) {
       <h2 className="text-xl font-semibold mb-4 text-gray-800">Quick Overview</h2>
       
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {getStats(totalBanners).map((item, index) => (
+        {getStats(totalBanners, facultyCount, activeStaffCount, inactiveStaffCount, totalUsersCount, activeUsersCount, inactiveUsersCount, totalCoursesCount, totalFeedbackCount, totalNewsCount).map((item, index) => (
           <div
             key={index}
             onClick={() => navigate(item.path)}

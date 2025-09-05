@@ -2,13 +2,15 @@ import React, { useState, useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { loginUser } from '../store/auth/authThunks';
-import { Lock, User, CheckCircle2 } from 'lucide-react';
+import { Lock, User, CheckCircle2, Eye, EyeOff } from 'lucide-react';
+import swcLogo from "../assets/swc.jpg";
 
 const LoginPage = () => {
   const [credentials, setCredentials] = useState({
     loginId: '',
     password: ''
   });
+  const [showPassword, setShowPassword] = useState(false); // State for password visibility
   const [localError, setLocalError] = useState('');
   const [showLogoutSuccess, setShowLogoutSuccess] = useState(false);
   
@@ -57,6 +59,10 @@ const LoginPage = () => {
     setShowLogoutSuccess(false);
   };
 
+  const togglePasswordVisibility = () => {
+    setShowPassword(!showPassword);
+  };
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-100 to-blue-300 relative">
       {showLogoutSuccess && (
@@ -77,6 +83,12 @@ const LoginPage = () => {
 
       <div className="bg-white p-8 rounded-2xl shadow-lg w-full max-w-md mx-4">
         <div className="text-center mb-8">
+          <img 
+            src={swcLogo} 
+            alt="SWC Logo" 
+            className="w-36 h-36 mx-auto mt-4 mb-2 rounded-full object-cover"
+          />
+
           <h2 className="text-3xl font-bold text-blue-700">Admin Dashboard</h2>
           <p className="text-gray-500 mt-2">Sign in to your administrator account</p>
         </div>
@@ -103,17 +115,25 @@ const LoginPage = () => {
               />
             </div>
 
-            <div className="flex items-center border rounded-lg px-3 py-2 bg-gray-50 focus-within:ring-2 ring-blue-400">
+            <div className="flex items-center border rounded-lg px-3 py-2 bg-gray-50 focus-within:ring-2 ring-blue-400 relative">
               <Lock className="text-gray-400 mr-2" size={18} />
               <input
-                type="password"
+                type={showPassword ? "text" : "password"}
                 name="password"
                 placeholder="Password"
-                className="w-full bg-transparent outline-none text-sm"
+                className="w-full bg-transparent outline-none text-sm pr-8"
                 value={credentials.password}
                 onChange={handleChange}
                 required
               />
+              <button
+                type="button"
+                className="absolute right-3 text-gray-400 hover:text-gray-600 focus:outline-none"
+                onClick={togglePasswordVisibility}
+                aria-label={showPassword ? "Hide password" : "Show password"}
+              >
+                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+              </button>
             </div>
           </div>
 

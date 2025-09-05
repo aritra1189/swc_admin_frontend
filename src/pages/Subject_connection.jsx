@@ -53,6 +53,7 @@ const SubjectManagement = () => {
   const [degrees, setDegrees] = useState([]);
   const [universities, setUniversities] = useState([]);
   const [subjectMasters, setSubjectMasters] = useState([]);
+  const [exams, setExams] = useState([]);
   
   // Loading states for related entities
   const [loadingGrades, setLoadingGrades] = useState(false);
@@ -61,6 +62,7 @@ const SubjectManagement = () => {
   const [loadingDegrees, setLoadingDegrees] = useState(false);
   const [loadingUniversities, setLoadingUniversities] = useState(false);
   const [loadingSubjectMasters, setLoadingSubjectMasters] = useState(false);
+  const [loadingExams, setLoadingExams] = useState(false);
   
   // Pagination state for subjects
   const [page, setPage] = useState(0);
@@ -78,6 +80,7 @@ const SubjectManagement = () => {
     degreeId: '',
     universityId: '',
     subMasterId: '',
+    examId: '',
     status: 'ACTIVE'
   });
   
@@ -92,6 +95,7 @@ const SubjectManagement = () => {
     semesterId: '',
     degreeId: '',
     universityId: '',
+    examId: '',
     status: 'ACTIVE'
   });
   
@@ -115,7 +119,7 @@ const SubjectManagement = () => {
     const sanitized = { ...data };
     
     // Convert empty strings to null for optional fields
-    const optionalFields = ['streamId', 'semesterId', 'degreeId', 'universityId'];
+    const optionalFields = ['streamId', 'semesterId', 'degreeId', 'universityId', 'examId','gradeId'];
     optionalFields.forEach(field => {
       if (sanitized[field] === '') {
         sanitized[field] = null;
@@ -134,6 +138,7 @@ const SubjectManagement = () => {
       setLoadingDegrees(true);
       setLoadingUniversities(true);
       setLoadingSubjectMasters(true);
+      setLoadingExams(true);
 
       // Fetch all entities in parallel with pagination
       const [
@@ -141,7 +146,8 @@ const SubjectManagement = () => {
         streamsRes,
         semestersRes,
         degreesRes,
-        universitiesRes
+        universitiesRes,
+        examsRes
       ] = await Promise.all([
         api.get('/grade/list', {
           params: {
@@ -177,6 +183,13 @@ const SubjectManagement = () => {
             offset: 0,
             status: 'ACTIVE'
           }
+        }),
+        api.get('/exam/list', {
+          params: {
+            limit: entityLimit,
+            offset: 0,
+            status: 'ACTIVE'
+          }
         })
       ]);
 
@@ -185,6 +198,7 @@ const SubjectManagement = () => {
       setSemesters(semestersRes.data.result || []);
       setDegrees(degreesRes.data.result || []);
       setUniversities(universitiesRes.data.result || []);
+      setExams(examsRes.data.result || []);
       
       // Fetch subject masters
       const subjectMastersRes = await api.get('/subject-master/list', {
@@ -206,6 +220,7 @@ const SubjectManagement = () => {
       setLoadingDegrees(false);
       setLoadingUniversities(false);
       setLoadingSubjectMasters(false);
+      setLoadingExams(false);
     }
   };
 
@@ -217,7 +232,7 @@ const SubjectManagement = () => {
       
       // Sanitize filter data - convert empty strings to null
       const sanitizedFilters = { ...filters };
-      const optionalFilterFields = ['gradeId', 'streamId', 'semesterId', 'degreeId', 'universityId', 'subMasterId'];
+      const optionalFilterFields = ['gradeId', 'streamId', 'semesterId', 'degreeId', 'universityId', 'subMasterId', 'examId'];
       optionalFilterFields.forEach(field => {
         if (sanitizedFilters[field] === '') {
           sanitizedFilters[field] = null;
@@ -293,6 +308,7 @@ const SubjectManagement = () => {
       semesterId: '',
       degreeId: '',
       universityId: '',
+      examId: '',
       status: 'ACTIVE'
     });
     setOpenDialog(true);
@@ -309,6 +325,7 @@ const SubjectManagement = () => {
       semesterId: subject.semesterId || '',
       degreeId: subject.degreeId || '',
       universityId: subject.universityId || '',
+      examId: subject.examId || '',
       status: subject.status || 'ACTIVE'
     });
     setOpenDialog(true);
@@ -506,6 +523,24 @@ const SubjectManagement = () => {
             </div>
             
             <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Exam</label>
+              <select
+                name="examId"
+                value={filters.examId}
+                onChange={handleFilterChange}
+                disabled={loadingExams}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              >
+                <option value="">All Exams</option>
+                {exams.map(exam => (
+                  <option key={exam.id} value={exam.id}>
+                    {exam.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            
+            <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
               <select
                 name="status"
@@ -546,7 +581,7 @@ const SubjectManagement = () => {
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Semester</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Degree</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">University</th>
-                  {/* <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th> */}
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Exam</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                 </tr>
               </thead>
@@ -592,18 +627,9 @@ const SubjectManagement = () => {
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="text-sm text-gray-900">{subject.university?.name || 'N/A'}</div>
                       </td>
-                      {/* <td className="px-6 py-4 whitespace-nowrap">
-                        <button
-                          onClick={() => handleToggleStatus(subject.id, subject.subMaster?.status)}
-                          className={`px-3 py-1 rounded-full text-xs font-medium ${
-                            subject.subMaster?.status === 'ACTIVE' 
-                              ? 'bg-green-100 text-green-800' 
-                              : 'bg-red-100 text-red-800'
-                          }`}
-                        >
-                          {subject.subMaster?.status}
-                        </button>
-                      </td> */}
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm text-gray-900">{subject.exam?.name || 'N/A'}</div>
+                      </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                         <button
                           onClick={() => handleOpenEditDialog(subject)}
@@ -783,7 +809,7 @@ const SubjectManagement = () => {
                     </select>
                   </div>
                   
-                  <div className="col-span-1 md:col-span-2">
+                  <div className="col-span-1">
                     <label className="block text-sm font-medium text-gray-700 mb-1">University</label>
                     <select
                       name="universityId"
@@ -796,6 +822,24 @@ const SubjectManagement = () => {
                       {universities.map(university => (
                         <option key={university.id} value={university.id}>
                           {university.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  
+                  <div className="col-span-1">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Exam</label>
+                    <select
+                      name="examId"
+                      value={formData.examId}
+                      onChange={handleInputChange}
+                      disabled={loadingExams}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    >
+                      <option value="">Select Exam (Optional)</option>
+                      {exams.map(exam => (
+                        <option key={exam.id} value={exam.id}>
+                          {exam.name}
                         </option>
                       ))}
                     </select>
@@ -825,7 +869,7 @@ const SubjectManagement = () => {
                   </button>
                   <button
                     onClick={handleSubmit}
-                    disabled={!formData.subMasterId || !formData.gradeId || !formData.status}
+                    disabled={!formData.subMasterId || !(formData.gradeId || formData.semesterId || formData.examId || formData.degreeId || formData.streamId || formData.universityId)}
                     className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {isEditMode ? 'Update' : 'Create'}
@@ -863,6 +907,7 @@ const SubjectManagement = () => {
                 >
                   <span className="sr-only">Dismiss</span>
                   <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
+
                     <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
                   </svg>
                 </button>

@@ -1,206 +1,57 @@
 // src/pages/AdminBoardManagement.jsx
-import React, { useState, useEffect } from "react";
-import axios from "axios";
-import { toast } from "react-toastify";
-import "react-toastify/dist/ReactToastify.css";
-import { API_BASE_URL } from "../config/api";
+import React, { useEffect } from "react";
+import { useDispatch, useSelector } from "react-redux";
+import {
+  fetchBoards,
+  createBoard,
+  updateBoard,
+  updateBoardStatus,
+  updateBoardIcon,
+  fetchAllGrades,
+  fetchConnectedGrades,
+  connectGradesToBoard,
+  removeGradeConnection,
+  setName,
+  setEditId,
+  setImageFile,
+  setImagePreview,
+  setPagination,
+  setSelectedBoard,
+  setShowGradeModal,
+  setSelectedGrades,
+  resetForm,
+  handleGradeSelection,
+  clearSelectedGrades
+} from "../store/Boardsslice";
 
 export default function AdminBoardManagement() {
-  const [boards, setBoards] = useState([]);
-  const [name, setName] = useState("");
-  const [editId, setEditId] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [imageFile, setImageFile] = useState(null);
-  const [imagePreview, setImagePreview] = useState(null);
-  const [pagination, setPagination] = useState({
-    limit: 10,
-    offset: 0,
-    total: 0,
-    status: "ACTIVE"
-  });
-  const [selectedBoard, setSelectedBoard] = useState(null);
-  const [grades, setGrades] = useState([]);
-  const [connectedGrades, setConnectedGrades] = useState([]);
-  const [showGradeModal, setShowGradeModal] = useState(false);
-  const [selectedGrades, setSelectedGrades] = useState([]);
-  const [loadingGrades, setLoadingGrades] = useState(false);
-  const [loadingConnections, setLoadingConnections] = useState(false);
+  const dispatch = useDispatch();
+  const {
+    boards,
+    name,
+    editId,
+    loading,
+    imageFile,
+    imagePreview,
+    pagination,
+    selectedBoard,
+    grades,
+    connectedGrades,
+    showGradeModal,
+    selectedGrades,
+    loadingGrades,
+    loadingConnections
+  } = useSelector((state) => state.boards);
 
-  const token = localStorage.getItem("token");
-
-  // ------------------------
-  // Axios API Functions
-  // ------------------------
-
-  // GET: Get Board List
-  const fetchBoards = async () => {
-    try {
-      setLoading(true);
-      const response = await axios.get(`${API_BASE_URL}/board/list`, {
-        headers: { Authorization: `Bearer ${token}` },
-        params: {
-          limit: pagination.limit,
-          offset: pagination.offset,
-          status: pagination.status,
-          keyword: ""
-        }
-      });
-      setBoards(response.data.result || []);
-      setPagination(prev => ({ ...prev, total: response.data.total || 0 }));
-    } catch (error) {
-      toast.error(error.response?.data?.message || "Failed to fetch boards");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // POST: Create Board
-  const createBoard = async (name) => {
-    try {
-      const response = await axios.post(
-        `${API_BASE_URL}/board`,
-        { name },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      toast.success("Board created successfully");
-      return response.data;
-    } catch (error) {
-      toast.error(error.response?.data?.message || "Failed to create board");
-      throw error;
-    }
-  };
-
-  // PATCH: Update Board
-  const updateBoard = async (id, name) => {
-    try {
-      await axios.patch(
-        `${API_BASE_URL}/board/${id}`,
-        { name },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      toast.success("Board updated successfully");
-    } catch (error) {
-      toast.error(error.response?.data?.message || "Failed to update board");
-      throw error;
-    }
-  };
-
-  // PUT: Update Board Status
-  const updateBoardStatus = async (id, currentStatus) => {
-    const newStatus = currentStatus === "ACTIVE" ? "DEACTIVE" : "ACTIVE";
-    try {
-      await axios.put(
-        `${API_BASE_URL}/board/status/${id}`,
-        { status: newStatus },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      toast.success(`Status updated to ${newStatus}`);
-    } catch (error) {
-      toast.error(error.response?.data?.message || "Failed to update status");
-      throw error;
-    }
-  };
-
-  // PUT: Update Board Icon
-  const updateBoardIcon = async (id, imageFile) => {
-    const formData = new FormData();
-    formData.append("file", imageFile);
-
-    try {
-      await axios.put(`${API_BASE_URL}/board/icon/${id}`, formData, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "multipart/form-data"
-        }
-      });
-      toast.success("Icon updated successfully");
-    } catch (error) {
-      toast.error(error.response?.data?.message || "Failed to update icon");
-      throw error;
-    }
-  };
-
-  // GET: Fetch all active grades
-  const fetchAllGrades = async () => {
-    try {
-      setLoadingGrades(true);
-      const response = await axios.get(`${API_BASE_URL}/grade/list`, {
-        headers: { Authorization: `Bearer ${token}` },
-        params: {
-          status: "ACTIVE",
-          limit: 100,
-          offset: 0,
-          keyword: ""
-        }
-      });
-      setGrades(response.data.result || []);
-    } catch (error) {
-      toast.error(error.response?.data?.message || "Failed to fetch grades");
-    } finally {
-      setLoadingGrades(false);
-    }
-  };
-
-  // GET: Fetch connected grades for a board
-  const fetchConnectedGrades = async (boardId) => {
-    try {
-      setLoadingConnections(true);
-      const response = await axios.get(`${API_BASE_URL}/board-grade/${boardId}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      setConnectedGrades(response.data.result || []);
-    } catch (error) {
-      toast.error(error.response?.data?.message || "Failed to fetch grade connections");
-    } finally {
-      setLoadingConnections(false);
-    }
-  };
-
-  // POST: Connect grades to board
-  const connectGradesToBoard = async (boardId, gradeIds) => {
-    try {
-      const promises = gradeIds.map(gradeId => 
-        axios.post(`${API_BASE_URL}/board-grade`, {
-          boardId,
-          gradeId
-        }, {
-          headers: { Authorization: `Bearer ${token}` }
-        })
-      );
-      
-      await Promise.all(promises);
-      toast.success("Grades connected successfully");
-      fetchConnectedGrades(boardId);
-    } catch (error) {
-      toast.error(error.response?.data?.message || "Failed to connect grades");
-    }
-  };
-
-  // DELETE: Remove grade connection
-  const removeGradeConnection = async (connectionId, boardId) => {
-    try {
-      await axios.delete(`${API_BASE_URL}/board-grade/remove/${connectionId}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      toast.success("Connection removed successfully");
-      fetchConnectedGrades(boardId);
-    } catch (error) {
-      toast.error(error.response?.data?.message || "Failed to remove connection");
-    }
-  };
-
-  // ------------------------
-  // Component Logic
-  // ------------------------
   useEffect(() => {
-    fetchBoards();
-  }, [pagination.offset, pagination.status]);
+    dispatch(fetchBoards(pagination));
+  }, [dispatch, pagination.offset, pagination.status]);
 
   const handleImageChange = (e) => {
     const file = e.target.files[0];
     if (file) {
-      setImageFile(file);
-      setImagePreview(URL.createObjectURL(file));
+      dispatch(setImageFile(file));
+      dispatch(setImagePreview(URL.createObjectURL(file)));
     }
   };
 
@@ -213,59 +64,48 @@ export default function AdminBoardManagement() {
 
     try {
       if (editId) {
-        await updateBoard(editId, name);
+        await dispatch(updateBoard({ id: editId, name })).unwrap();
         if (imageFile) {
-          await updateBoardIcon(editId, imageFile);
+          await dispatch(updateBoardIcon({ id: editId, imageFile })).unwrap();
         }
-        setEditId(null);
       } else {
-        const newBoard = await createBoard(name);
+        const newBoard = await dispatch(createBoard(name)).unwrap();
         if (imageFile) {
-          await updateBoardIcon(newBoard.id, imageFile);
+          await dispatch(updateBoardIcon({ id: newBoard.id, imageFile })).unwrap();
         }
       }
-
-      setName("");
-      setImageFile(null);
-      setImagePreview(null);
-      fetchBoards();
+      
+      dispatch(resetForm());
+      dispatch(fetchBoards(pagination));
     } catch (error) {
       console.error("Operation failed:", error);
     }
   };
 
   const handleEdit = (board) => {
-    setName(board.name);
-    setEditId(board.id);
-    setImagePreview(board.icon || null);
+    dispatch(setName(board.name));
+    dispatch(setEditId(board.id));
+    dispatch(setImagePreview(board.icon || null));
   };
 
   const handleStatusToggle = async (id, currentStatus) => {
-    await updateBoardStatus(id, currentStatus);
-    fetchBoards();
+    await dispatch(updateBoardStatus({ id, currentStatus })).unwrap();
+    dispatch(fetchBoards(pagination));
   };
 
   const handlePageChange = (newOffset) => {
-    setPagination(prev => ({ ...prev, offset: newOffset }));
+    dispatch(setPagination({ ...pagination, offset: newOffset }));
   };
 
   const handleStatusFilter = (status) => {
-    setPagination(prev => ({ ...prev, status, offset: 0 }));
+    dispatch(setPagination({ ...pagination, status, offset: 0 }));
   };
 
   const handleOpenGradeModal = async (board) => {
-    setSelectedBoard(board);
-    await fetchAllGrades();
-    await fetchConnectedGrades(board.id);
-    setShowGradeModal(true);
-  };
-
-  const handleGradeSelection = (gradeId) => {
-    setSelectedGrades(prev => 
-      prev.includes(gradeId) 
-        ? prev.filter(id => id !== gradeId) 
-        : [...prev, gradeId]
-    );
+    dispatch(setSelectedBoard(board));
+    await dispatch(fetchAllGrades()).unwrap();
+    await dispatch(fetchConnectedGrades(board.id)).unwrap();
+    dispatch(setShowGradeModal(true));
   };
 
   const handleConnectGrades = async () => {
@@ -273,14 +113,26 @@ export default function AdminBoardManagement() {
       toast.warning("Please select at least one grade");
       return;
     }
-    await connectGradesToBoard(selectedBoard.id, selectedGrades);
-    setSelectedGrades([]);
+    await dispatch(connectGradesToBoard({ 
+      boardId: selectedBoard.id, 
+      gradeIds: selectedGrades 
+    })).unwrap();
+    dispatch(clearSelectedGrades());
+    dispatch(fetchConnectedGrades(selectedBoard.id));
+  };
+
+  const handleRemoveConnection = async (connectionId) => {
+    await dispatch(removeGradeConnection({ 
+      connectionId, 
+      boardId: selectedBoard.id 
+    })).unwrap();
+    dispatch(fetchConnectedGrades(selectedBoard.id));
   };
 
   const handleCloseModal = () => {
-    setShowGradeModal(false);
-    setSelectedBoard(null);
-    setSelectedGrades([]);
+    dispatch(setShowGradeModal(false));
+    dispatch(setSelectedBoard(null));
+    dispatch(clearSelectedGrades());
   };
 
   return (
@@ -300,7 +152,7 @@ export default function AdminBoardManagement() {
               <input
                 type="text"
                 value={name}
-                onChange={(e) => setName(e.target.value)}
+                onChange={(e) => dispatch(setName(e.target.value))}
                 className="w-full border border-gray-300 rounded p-2"
                 required
               />
@@ -335,11 +187,7 @@ export default function AdminBoardManagement() {
           {editId && (
             <button
               type="button"
-              onClick={() => {
-                setEditId(null);
-                setName("");
-                setImagePreview(null);
-              }}
+              onClick={() => dispatch(resetForm())}
               className="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600"
             >
               Cancel
@@ -447,26 +295,26 @@ export default function AdminBoardManagement() {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap space-x-2">
                         <div className="flex flex-wrap gap-2">
-                        <button
-                           onClick={() => handleEdit(board)}
-                          className="flex items-center px-3 py-1.5 bg-yellow-50 border border-yellow-200 rounded-md text-yellow-700 hover:bg-yellow-100 transition-colors"
-                       >
-                     <svg className="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                     </svg>
-                     Edit
-                     </button>
+                          <button
+                            onClick={() => handleEdit(board)}
+                            className="flex items-center px-3 py-1.5 bg-yellow-50 border border-yellow-200 rounded-md text-yellow-700 hover:bg-yellow-100 transition-colors"
+                          >
+                            <svg className="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                            </svg>
+                            Edit
+                          </button>
 
-                     <button
-                       onClick={() => handleOpenGradeModal(board)}
-                       className="flex items-center px-3 py-1.5 bg-blue-50 border border-blue-200 rounded-md text-blue-700 hover:bg-blue-100 transition-colors"
-                     >
-                    <svg className="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" />
-                    </svg>
-                    Connect Grades
-                    </button>
-                    </div>
+                          <button
+                            onClick={() => handleOpenGradeModal(board)}
+                            className="flex items-center px-3 py-1.5 bg-blue-50 border border-blue-200 rounded-md text-blue-700 hover:bg-blue-100 transition-colors"
+                          >
+                            <svg className="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" />
+                            </svg>
+                            Connect Grades
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -534,7 +382,7 @@ export default function AdminBoardManagement() {
                           <span>{connection.grade?.name}</span>
                         </div>
                         <button
-                          onClick={() => removeGradeConnection(connection.id, selectedBoard.id)}
+                          onClick={() => handleRemoveConnection(connection.id)}
                           className="text-red-500 hover:text-red-700"
                         >
                           Remove
@@ -563,7 +411,7 @@ export default function AdminBoardManagement() {
                               type="checkbox"
                               id={`grade-${grade.id}`}
                               checked={selectedGrades.includes(grade.id)}
-                              onChange={() => handleGradeSelection(grade.id)}
+                              onChange={() => dispatch(handleGradeSelection(grade.id))}
                               className="mr-2"
                             />
                             <label htmlFor={`grade-${grade.id}`} className="flex items-center cursor-pointer">

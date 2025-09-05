@@ -1,291 +1,69 @@
 // src/pages/AdminLevelManagement.jsx
-import React, { useState, useEffect } from "react";
-import axios from "axios";
+import React, { useEffect } from "react";
+import { useDispatch, useSelector } from "react-redux";
+import {
+  fetchLevels,
+  createLevel,
+  updateLevel,
+  updateLevelStatus,
+  updateLevelImage,
+  deleteLevel,
+  fetchAllBoards,
+  fetchAllDegrees,
+  fetchConnectedBoards,
+  fetchConnectedDegrees,
+  connectBoardsToLevel,
+  connectDegreesToLevel,
+  removeBoardConnection,
+  removeDegreeConnection,
+  setName,
+  setEditId,
+  setImageFile,
+  setImagePreview,
+  setStatusFilter,
+  setSelectedLevel,
+  setShowConnectionModal,
+  setConnectionType,
+  setSelectedConnections,
+  resetForm,
+  addToSelectedConnections,
+  removeFromSelectedConnections,
+  clearSelectedConnections
+} from "../store/levelSlice";
 import { toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
-import { API_BASE_URL } from "../config/api";
 
 export default function AdminLevelManagement() {
-  const [levels, setLevels] = useState([]);
-  const [name, setName] = useState("");
-  const [editId, setEditId] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [imageFile, setImageFile] = useState(null);
-  const [imagePreview, setImagePreview] = useState(null);
-  const [statusFilter, setStatusFilter] = useState("PENDING");
-  const [selectedLevel, setSelectedLevel] = useState(null);
-  const [boards, setBoards] = useState([]);
-  const [degrees, setDegrees] = useState([]);
-  const [connectedBoards, setConnectedBoards] = useState([]);
-  const [connectedDegrees, setConnectedDegrees] = useState([]);
-  const [showConnectionModal, setShowConnectionModal] = useState(false);
-  const [connectionType, setConnectionType] = useState("board"); // 'board' or 'degree'
-  const [selectedConnections, setSelectedConnections] = useState([]);
-  const [loadingConnections, setLoadingConnections] = useState(false);
-  const [loadingItems, setLoadingItems] = useState(false);
+  const dispatch = useDispatch();
+  const {
+    levels,
+    loading,
+    name,
+    editId,
+    imageFile,
+    imagePreview,
+    statusFilter,
+    selectedLevel,
+    boards,
+    degrees,
+    connectedBoards,
+    connectedDegrees,
+    showConnectionModal,
+    connectionType,
+    selectedConnections,
+    loadingConnections,
+    loadingItems
+  } = useSelector(state => state.levels);
 
-  const token = localStorage.getItem("token");
-
- 
-  // GET: Get Level List
-  const fetchLevels = async () => {
-    try {
-      setLoading(true);
-      const params = {
-        limit: 100,
-        offset: 0,
-        keyword: ""
-      };
-
-      if (statusFilter !== "ALL") {
-        params.status = statusFilter;
-      }
-
-      const response = await axios.get(`${API_BASE_URL}/level/list`, {
-        headers: { Authorization: `Bearer ${token}` },
-        params
-      });
-
-      setLevels(response.data.result || []);
-    } catch (error) {
-      toast.error(error.response?.data?.message || "Failed to fetch levels");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // POST: Create Level
-  const createLevel = async (name) => {
-    try {
-      const response = await axios.post(
-        `${API_BASE_URL}/level`,
-        { name },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      toast.success("Level created successfully");
-      return response.data;
-    } catch (error) {
-      toast.error(error.response?.data?.message || "Failed to create level");
-      throw error;
-    }
-  };
-
-  // PATCH: Update Level Name
-  const updateLevel = async (id, name) => {
-    try {
-      await axios.patch(
-        `${API_BASE_URL}/level/${id}`,
-        { name },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      toast.success("Level name updated");
-    } catch (error) {
-      toast.error(error.response?.data?.message || "Failed to update level");
-      throw error;
-    }
-  };
-
-  // PUT: Update Level Status
-  const updateLevelStatus = async (id, currentStatus) => {
-    const newStatus = currentStatus === "ACTIVE" ? "DEACTIVE" : "ACTIVE";
-    try {
-      await axios.put(
-        `${API_BASE_URL}/level/status/${id}`,
-        { status: newStatus },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      toast.success(`Status updated to ${newStatus}`);
-    } catch (error) {
-      toast.error(error.response?.data?.message || "Failed to update status");
-      throw error;
-    }
-  };
-
-  // PUT: Update Level Image
-  const updateLevelImage = async (id, imageFile) => {
-    const formData = new FormData();
-    formData.append("file", imageFile);
-
-    try {
-      await axios.put(`${API_BASE_URL}/level/image/${id}`, formData, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "multipart/form-data"
-        }
-      });
-      toast.success("Image updated successfully");
-    } catch (error) {
-      toast.error(error.response?.data?.message || "Failed to update image");
-      throw error;
-    }
-  };
-
-  // DELETE: Delete Level
-  const deleteLevel = async (id) => {
-    if (!window.confirm("Are you sure you want to delete this level?")) return;
-
-    try {
-      await axios.delete(`${API_BASE_URL}/level/${id}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      toast.success("Level deleted successfully");
-      return true;
-    } catch (error) {
-      toast.error(error.response?.data?.message || "Failed to delete level");
-      throw error;
-    }
-  };
-
-  // GET: Fetch all active boards
-  const fetchAllBoards = async () => {
-    try {
-      setLoadingItems(true);
-      const response = await axios.get(`${API_BASE_URL}/board/list`, {
-        headers: { Authorization: `Bearer ${token}` },
-        params: {
-          status: "ACTIVE",
-          limit: 100,
-          offset: 0,
-          keyword: ""
-        }
-      });
-      setBoards(response.data.result || []);
-    } catch (error) {
-      toast.error(error.response?.data?.message || "Failed to fetch boards");
-    } finally {
-      setLoadingItems(false);
-    }
-  };
-
-  // GET: Fetch all active degrees
-  const fetchAllDegrees = async () => {
-    try {
-      setLoadingItems(true);
-      const response = await axios.get(`${API_BASE_URL}/degree/list`, {
-        headers: { Authorization: `Bearer ${token}` },
-        params: {
-          status: "ACTIVE",
-          limit: 100,
-          offset: 0,
-          keyword: ""
-        }
-      });
-      setDegrees(response.data.result || []);
-    } catch (error) {
-      toast.error(error.response?.data?.message || "Failed to fetch degrees");
-    } finally {
-      setLoadingItems(false);
-    }
-  };
-
-  // GET: Fetch connected boards for a level
-  const fetchConnectedBoards = async (levelId) => {
-    try {
-      setLoadingConnections(true);
-      const response = await axios.get(`${API_BASE_URL}/level-board/${levelId}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      setConnectedBoards(response.data.result || []);
-    } catch (error) {
-      toast.error(error.response?.data?.message || "Failed to fetch board connections");
-    } finally {
-      setLoadingConnections(false);
-    }
-  };
-
-  // GET: Fetch connected degrees for a level
-  const fetchConnectedDegrees = async (levelId) => {
-    try {
-      setLoadingConnections(true);
-      const response = await axios.get(`${API_BASE_URL}/level-degree/${levelId}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      setConnectedDegrees(response.data.result || []);
-    } catch (error) {
-      toast.error(error.response?.data?.message || "Failed to fetch degree connections");
-    } finally {
-      setLoadingConnections(false);
-    }
-  };
-
-  // POST: Connect boards to level
-  const connectBoardsToLevel = async (levelId, boardIds) => {
-    try {
-      const promises = boardIds.map(boardId => 
-        axios.post(`${API_BASE_URL}/level-board`, {
-          levelId,
-          boardId
-        }, {
-          headers: { Authorization: `Bearer ${token}` }
-        })
-      );
-      
-      await Promise.all(promises);
-      toast.success("Boards connected successfully");
-      fetchConnectedBoards(levelId);
-    } catch (error) {
-      toast.error(error.response?.data?.message || "Failed to connect boards");
-    }
-  };
-
-  // POST: Connect degrees to level
-  const connectDegreesToLevel = async (levelId, degreeIds) => {
-    try {
-      const promises = degreeIds.map(degreeId => 
-        axios.post(`${API_BASE_URL}/level-degree`, {
-          levelId,
-          degreeId
-        }, {
-          headers: { Authorization: `Bearer ${token}` }
-        })
-      );
-      
-      await Promise.all(promises);
-      toast.success("Degrees connected successfully");
-      fetchConnectedDegrees(levelId);
-    } catch (error) {
-      toast.error(error.response?.data?.message || "Failed to connect degrees");
-    }
-  };
-
-  // DELETE: Remove board connection
-  const removeBoardConnection = async (connectionId, levelId) => {
-    try {
-      await axios.delete(`${API_BASE_URL}/level-board/remove/${connectionId}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      toast.success("Board connection removed successfully");
-      fetchConnectedBoards(levelId);
-    } catch (error) {
-      toast.error(error.response?.data?.message || "Failed to remove board connection");
-    }
-  };
-
-  // DELETE: Remove degree connection
-  const removeDegreeConnection = async (connectionId, levelId) => {
-    try {
-      await axios.delete(`${API_BASE_URL}/level-degree/remove/${connectionId}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      toast.success("Degree connection removed successfully");
-      fetchConnectedDegrees(levelId);
-    } catch (error) {
-      toast.error(error.response?.data?.message || "Failed to remove degree connection");
-    }
-  };
-
-  // ------------------------
-  // Component Logic
-  // ------------------------
   useEffect(() => {
-    fetchLevels();
-  }, [statusFilter]);
+    dispatch(fetchLevels(statusFilter));
+  }, [dispatch, statusFilter]);
 
   const handleImageChange = (e) => {
     const file = e.target.files[0];
     if (file) {
-      setImageFile(file);
-      setImagePreview(URL.createObjectURL(file));
+      dispatch(setImageFile(file));
+      dispatch(setImagePreview(URL.createObjectURL(file)));
     }
   };
 
@@ -298,64 +76,69 @@ export default function AdminLevelManagement() {
 
     try {
       if (editId) {
-        await updateLevel(editId, name);
+        await dispatch(updateLevel({ id: editId, name })).unwrap();
         if (imageFile) {
-          await updateLevelImage(editId, imageFile);
+          await dispatch(updateLevelImage({ id: editId, imageFile })).unwrap();
         }
-        setEditId(null);
+        dispatch(resetForm());
       } else {
-        const newLevel = await createLevel(name);
+        const newLevel = await dispatch(createLevel(name)).unwrap();
         if (imageFile) {
-          await updateLevelImage(newLevel.id, imageFile);
+          await dispatch(updateLevelImage({ id: newLevel.id, imageFile })).unwrap();
         }
+        dispatch(resetForm());
       }
 
-      setName("");
-      setImageFile(null);
-      setImagePreview(null);
-      fetchLevels();
+      dispatch(fetchLevels(statusFilter));
     } catch (error) {
       console.error("Operation failed:", error);
     }
   };
 
   const handleEdit = (level) => {
-    setName(level.name);
-    setEditId(level.id);
-    setImagePreview(level.image || null);
+    dispatch(setName(level.name));
+    dispatch(setEditId(level.id));
+    dispatch(setImagePreview(level.image || null));
   };
 
   const handleStatusToggle = async (id, currentStatus) => {
-    await updateLevelStatus(id, currentStatus);
-    fetchLevels();
+    await dispatch(updateLevelStatus({ id, currentStatus })).unwrap();
+    dispatch(fetchLevels(statusFilter));
   };
 
   const handleDelete = async (id) => {
-    const success = await deleteLevel(id);
-    if (success) fetchLevels();
+    if (!window.confirm("Are you sure you want to delete this level?")) return;
+
+    try {
+      await dispatch(deleteLevel(id)).unwrap();
+      dispatch(fetchLevels(statusFilter));
+    } catch (error) {
+      console.error("Failed to delete level:", error);
+    }
   };
 
   const handleOpenConnectionModal = async (level, type) => {
-    setSelectedLevel(level);
-    setConnectionType(type);
+    dispatch(setSelectedLevel(level));
+    dispatch(setConnectionType(type));
+    dispatch(clearSelectedConnections());
     
     if (type === "board") {
-      await fetchAllBoards();
-      await fetchConnectedBoards(level.id);
+      await dispatch(fetchAllBoards()).unwrap();
+      await dispatch(fetchConnectedBoards(level.id)).unwrap();
     } else {
-      await fetchAllDegrees();
-      await fetchConnectedDegrees(level.id);
+      await dispatch(fetchAllDegrees()).unwrap();
+      await dispatch(fetchConnectedDegrees(level.id)).unwrap();
     }
     
-    setShowConnectionModal(true);
+    dispatch(setShowConnectionModal(true));
   };
 
   const handleConnectionSelection = (id) => {
-    setSelectedConnections(prev => 
-      prev.includes(id) 
-        ? prev.filter(itemId => itemId !== id) 
-        : [...prev, id]
-    );
+    if (selectedConnections.includes(id)) {
+      dispatch(removeFromSelectedConnections(id));
+    } else {
+      dispatch(addToSelectedConnections(id));
+    }
   };
 
   const handleConnectItems = async () => {
@@ -365,18 +148,40 @@ export default function AdminLevelManagement() {
     }
 
     if (connectionType === "board") {
-      await connectBoardsToLevel(selectedLevel.id, selectedConnections);
+      await dispatch(connectBoardsToLevel({
+        levelId: selectedLevel.id,
+        boardIds: selectedConnections
+      })).unwrap();
+      dispatch(fetchConnectedBoards(selectedLevel.id));
     } else {
-      await connectDegreesToLevel(selectedLevel.id, selectedConnections);
+      await dispatch(connectDegreesToLevel({
+        levelId: selectedLevel.id,
+        degreeIds: selectedConnections
+      })).unwrap();
+      dispatch(fetchConnectedDegrees(selectedLevel.id));
     }
     
-    setSelectedConnections([]);
+    dispatch(clearSelectedConnections());
   };
 
   const handleCloseModal = () => {
-    setShowConnectionModal(false);
-    setSelectedLevel(null);
-    setSelectedConnections([]);
+    dispatch(setShowConnectionModal(false));
+    dispatch(setSelectedLevel(null));
+    dispatch(clearSelectedConnections());
+  };
+
+  const handleRemoveConnection = async (connectionId, type) => {
+    if (type === "board") {
+      await dispatch(removeBoardConnection({
+        connectionId,
+        levelId: selectedLevel.id
+      })).unwrap();
+    } else {
+      await dispatch(removeDegreeConnection({
+        connectionId,
+        levelId: selectedLevel.id
+      })).unwrap();
+    }
   };
 
   return (
@@ -388,7 +193,7 @@ export default function AdminLevelManagement() {
         <label className="font-medium">Status Filter:</label>
         <select
           value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
+          onChange={(e) => dispatch(setStatusFilter(e.target.value))}
           className="border border-gray-300 rounded px-3 py-1"
         >
           <option value="ACTIVE">Active</option>
@@ -410,7 +215,7 @@ export default function AdminLevelManagement() {
               <input
                 type="text"
                 value={name}
-                onChange={(e) => setName(e.target.value)}
+                onChange={(e) => dispatch(setName(e.target.value))}
                 className="w-full border border-gray-300 rounded p-2"
                 required
               />
@@ -445,11 +250,7 @@ export default function AdminLevelManagement() {
           {editId && (
             <button
               type="button"
-              onClick={() => {
-                setEditId(null);
-                setName("");
-                setImagePreview(null);
-              }}
+              onClick={() => dispatch(resetForm())}
               className="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600"
             >
               Cancel
@@ -517,33 +318,43 @@ export default function AdminLevelManagement() {
                     <td className="px-6 py-4 whitespace-nowrap space-x-2">
                       <div className="flex flex-wrap gap-2">
                         <button
-                           onClick={() => handleEdit(level)}
+                          onClick={() => handleEdit(level)}
                           className="flex items-center px-3 py-1.5 bg-yellow-50 border border-yellow-200 rounded-md text-yellow-700 hover:bg-yellow-100 transition-colors"
-                       >
-                     <svg className="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                     </svg>
-                     Edit
-                     </button>
+                        >
+                          <svg className="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                          </svg>
+                          Edit
+                        </button>
 
-                     <button
-                       onClick={() => handleOpenConnectionModal(level, "board")}
-                       className="flex items-center px-3 py-1.5 bg-blue-50 border border-blue-200 rounded-md text-blue-700 hover:bg-blue-100 transition-colors"
-                     >
-                    <svg className="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" />
-                    </svg>
-                    Connect Boards
-                    </button>
-                    <button
-                       onClick={() => handleOpenConnectionModal(level, "degree")}
-                       className="flex items-center px-3 py-1.5 bg-purple-50 border border-purple-200 rounded-md text-purple-700 hover:bg-purple-100 transition-colors"
-                       >
-                      <svg className="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                      </svg>
-                        Connect Degrees
-                      </button>
+                        <button
+                          onClick={() => handleOpenConnectionModal(level, "board")}
+                          className="flex items-center px-3 py-1.5 bg-blue-50 border border-blue-200 rounded-md text-blue-700 hover:bg-blue-100 transition-colors"
+                        >
+                          <svg className="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" />
+                          </svg>
+                          Connect Boards
+                        </button>
+                        <button
+                          onClick={() => handleOpenConnectionModal(level, "degree")}
+                          className="flex items-center px-3 py-1.5 bg-purple-50 border border-purple-200 rounded-md text-purple-700 hover:bg-purple-100 transition-colors"
+                        >
+                          <svg className="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                          Connect Degrees
+                        </button>
+                        
+                        {/* <button
+                          onClick={() => handleDelete(level.id)}
+                          className="flex items-center px-3 py-1.5 bg-red-50 border border-red-200 rounded-md text-red-700 hover:bg-red-100 transition-colors"
+                        >
+                          <svg className="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
+                          Delete
+                        </button> */}
                       </div>
                     </td>
                   </tr>
@@ -603,11 +414,7 @@ export default function AdminLevelManagement() {
                           <span>{connectionType === "board" ? connection.board?.name : connection.degree?.name}</span>
                         </div>
                         <button
-                          onClick={() => 
-                            connectionType === "board" 
-                              ? removeBoardConnection(connection.id, selectedLevel.id)
-                              : removeDegreeConnection(connection.id, selectedLevel.id)
-                          }
+                          onClick={() => handleRemoveConnection(connection.id, connectionType)}
                           className="text-red-500 hover:text-red-700"
                         >
                           Remove

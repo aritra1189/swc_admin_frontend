@@ -1,19 +1,23 @@
 import React, { useEffect } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import {
-  fetchSubjects,
+  fetchSubjectsAndCourses,
   fetchUnits,
   fetchAudioLectures,
   addAudioLecture,
   updateAudioLecture,
   uploadAudioFile,
   uploadThumbnail,
+  setActiveTab,
   setSelectedSubject,
-  setSelectedUnit,
+  setSelectedCourse,
+  setSelectedSubjectUnit,
+  setSelectedCourseUnit,
   setTitle,
   setDescription,
   setDuration,
   setPrice,
+  setValidityDays,
   setAccessTypes,
   setEditingAudio,
   setFilter,
@@ -22,7 +26,7 @@ import {
   setAudioError,
   setPlayingAudio,
   resetForm,
-  setAudioElement
+  setAudioElement,
 } from "../store/AudioLectureslice";
 import { API_BASE_URL } from "../config/api";
 
@@ -31,13 +35,18 @@ const useAudioLectureState = () => {
   const state = useSelector((state) => state.audioLectures || {});
   
   return {
+    activeTab: state.activeTab || "subjects",
     subjects: state.subjects || [],
-    units: state.units || [],
-    filteredSubjects: state.filteredSubjects || [],
-    audioLectures: state.audioLectures || [],
+    courses: state.courses || [],
+    subjectUnits: state.subjectUnits || [],
+    courseUnits: state.courseUnits || [],
+    subjectAudioLectures: state.subjectAudioLectures || [],
+    courseAudioLectures: state.courseAudioLectures || [],
     loading: state.loading || false,
     selectedSubject: state.selectedSubject || "",
-    selectedUnit: state.selectedUnit || "",
+    selectedCourse: state.selectedCourse || "",
+    selectedSubjectUnit: state.selectedSubjectUnit || "",
+    selectedCourseUnit: state.selectedCourseUnit || "",
     message: state.message || "",
     playingAudio: state.playingAudio || null,
     audioError: state.audioError || null,
@@ -46,6 +55,7 @@ const useAudioLectureState = () => {
     description: state.description || "",
     duration: state.duration || "",
     price: state.price || 0,
+    validityDays: state.validityDays || 0,
     accessTypes: state.accessTypes || "FREE",
     editingAudio: state.editingAudio || null,
     filters: state.filters || {
@@ -54,8 +64,9 @@ const useAudioLectureState = () => {
       semester: "",
       degree: "",
       university: "",
-      subjectName: "",
-      accessTypes: ""
+      name: "",
+      accessTypes: "",
+      exam: ""
     },
     filterOptions: state.filterOptions || {
       grades: [],
@@ -63,8 +74,11 @@ const useAudioLectureState = () => {
       semesters: [],
       degrees: [],
       universities: [],
-      subjectNames: []
+      names: [],
+      exams: []
     },
+    filteredSubjects: state.filteredSubjects || [],
+    filteredCourses: state.filteredCourses || [],
   };
 };
 
@@ -73,13 +87,18 @@ const AudioLectureManagement = () => {
   const state = useAudioLectureState();
   
   const {
+    activeTab,
     subjects,
-    units,
-    filteredSubjects,
-    audioLectures,
+    courses,
+    subjectUnits,
+    courseUnits,
+    subjectAudioLectures,
+    courseAudioLectures,
     loading,
     selectedSubject,
-    selectedUnit,
+    selectedCourse,
+    selectedSubjectUnit,
+    selectedCourseUnit,
     message,
     playingAudio,
     audioError,
@@ -88,10 +107,13 @@ const AudioLectureManagement = () => {
     description,
     duration,
     price,
+    validityDays,
     accessTypes,
     editingAudio,
     filters,
     filterOptions,
+    filteredSubjects,
+    filteredCourses,
   } = state;
 
   const supportedFormats = ['.mp3', '.wav', '.ogg', '.m4a', '.aac'];
@@ -106,9 +128,9 @@ const AudioLectureManagement = () => {
     };
   }, [audioElement]);
 
-  // Fetch subjects on mount
+  // Fetch subjects and courses on mount
   useEffect(() => {
-    dispatch(fetchSubjects());
+    dispatch(fetchSubjectsAndCourses());
   }, [dispatch]);
 
   // Function to fix audio URL - replace backslashes with forward slashes
@@ -142,38 +164,63 @@ const AudioLectureManagement = () => {
     return supportedFormats.includes(extension);
   };
 
-  // Fetch units when subject is selected
-  useEffect(() => {
-    if (selectedSubject) {
-      dispatch(fetchUnits(selectedSubject));
+  // Fetch units when subject/course is selected
+  const handleSelectItem = (id) => {
+    if (activeTab === "subjects") {
+      dispatch(setSelectedSubject(id));
+    } else {
+      dispatch(setSelectedCourse(id));
     }
-  }, [selectedSubject, dispatch]);
+    
+    if (id) {
+      dispatch(fetchUnits({ id, type: activeTab }));
+    }
+  };
 
   // Fetch audio lectures when unit is selected
-  useEffect(() => {
-    if (selectedUnit) {
-      dispatch(fetchAudioLectures({ unitId: selectedUnit, accessTypeFilter: filters.accessTypes }));
+  const handleSelectUnit = (unitId) => {
+    if (activeTab === "subjects") {
+      dispatch(setSelectedSubjectUnit(unitId));
+    } else {
+      dispatch(setSelectedCourseUnit(unitId));
     }
-  }, [selectedUnit, filters.accessTypes, dispatch]);
+    
+    if (unitId) {
+      dispatch(fetchAudioLectures({ unitId, accessTypeFilter: filters.accessTypes }));
+    }
+  };
 
   // Add new audio lecture
   const handleAddAudioLecture = async (e) => {
     e.preventDefault();
-    if (!selectedSubject || !selectedUnit || !title.trim()) {
+    
+    const selectedId = activeTab === "subjects" ? selectedSubject : selectedCourse;
+    const selectedUnit = activeTab === "subjects" ? selectedSubjectUnit : selectedCourseUnit;
+    
+    if (!selectedId || !selectedUnit || !title.trim()) {
       dispatch(setMessage("Please fill all required fields."));
       return;
     }
 
     try {
-      await dispatch(addAudioLecture({
-        subjectId: selectedSubject,
-        unitId: selectedUnit,
+      const audioData = {
         title,
         description,
         duration: parseInt(duration) || 0,
         price: accessTypes === "PAID" ? parseFloat(price) : 0,
-        accessTypes
-      })).unwrap();
+        validityDays: parseInt(validityDays) || 0,
+        accessTypes,
+        unitId: selectedUnit
+      };
+      
+      // Add the appropriate ID based on active tab
+      if (activeTab === "subjects") {
+        audioData.subjectId = selectedSubject;
+      } else {
+        audioData.courseId = selectedCourse;
+      }
+
+      await dispatch(addAudioLecture(audioData)).unwrap();
       
       dispatch(resetForm());
       dispatch(fetchAudioLectures({ unitId: selectedUnit, accessTypeFilter: filters.accessTypes }));
@@ -191,18 +238,22 @@ const AudioLectureManagement = () => {
     }
 
     try {
+      const updateData = {
+        title,
+        description,
+        duration: parseInt(duration) || 0,
+        price: accessTypes === "PAID" ? parseFloat(price) : 0,
+        validityDays: parseInt(validityDays) || 0,
+        accessTypes
+      };
+
       await dispatch(updateAudioLecture({
         id: editingAudio.id,
-        data: {
-          title,
-          description,
-          duration: parseInt(duration) || 0,
-          price: accessTypes === "PAID" ? parseFloat(price) : 0,
-          accessTypes
-        }
+        data: updateData
       })).unwrap();
       
       dispatch(resetForm());
+      const selectedUnit = activeTab === "subjects" ? selectedSubjectUnit : selectedCourseUnit;
       dispatch(fetchAudioLectures({ unitId: selectedUnit, accessTypeFilter: filters.accessTypes }));
     } catch (err) {
       console.error("Error updating audio lecture:", err);
@@ -212,6 +263,12 @@ const AudioLectureManagement = () => {
   // Handle edit audio lecture
   const handleEditAudioLecture = (audio) => {
     dispatch(setEditingAudio(audio));
+    dispatch(setTitle(audio.title || ""));
+    dispatch(setDescription(audio.description || ""));
+    dispatch(setDuration(audio.duration || ""));
+    dispatch(setPrice(audio.price || 0));
+    dispatch(setValidityDays(audio.validityDays || 0));
+    dispatch(setAccessTypes(audio.accessTypes || "FREE"));
   };
 
   // Cancel edit
@@ -230,6 +287,7 @@ const AudioLectureManagement = () => {
     try {
       dispatch(setMessage("⏳ Uploading audio file..."));
       await dispatch(uploadAudioFile({ audioId, file })).unwrap();
+      const selectedUnit = activeTab === "subjects" ? selectedSubjectUnit : selectedCourseUnit;
       dispatch(fetchAudioLectures({ unitId: selectedUnit, accessTypeFilter: filters.accessTypes }));
     } catch (err) {
       console.error("Error uploading audio:", err);
@@ -241,6 +299,7 @@ const AudioLectureManagement = () => {
     try {
       dispatch(setMessage("⏳ Uploading thumbnail..."));
       await dispatch(uploadThumbnail({ audioId, file })).unwrap();
+      const selectedUnit = activeTab === "subjects" ? selectedSubjectUnit : selectedCourseUnit;
       dispatch(fetchAudioLectures({ unitId: selectedUnit, accessTypeFilter: filters.accessTypes }));
     } catch (err) {
       console.error("Error uploading thumbnail:", err);
@@ -257,14 +316,22 @@ const AudioLectureManagement = () => {
     dispatch(clearFilters());
   };
 
-  // Format subject display name with all relevant information
-  const formatSubjectName = (subject) => {
-    let name = subject.subMaster?.name || 'Unknown Subject';
-    if (subject.grade?.name) name += ` - ${subject.grade.name}`;
-    if (subject.stream?.name) name += ` - ${subject.stream.name}`;
-    if (subject.semester?.name) name += ` - ${subject.semester.name}`;
-    if (subject.degree?.name) name += ` - ${subject.degree.name}`;
-    if (subject.university?.name) name += ` - ${subject.university.name}`;
+  // Format display name with all relevant information
+  const formatName = (item) => {
+    let name = "";
+    
+    if (activeTab === "subjects") {
+      name = item.subMaster?.name || "Unnamed Subject";
+    } else {
+      name = item.name || "Unnamed Course";
+    }
+    
+    if (item.grade?.name) name += ` - ${item.grade.name}`;
+    if (item.stream?.name) name += ` - ${item.stream.name}`;
+    if (item.semester?.name) name += ` - ${item.semester.name}`;
+    if (item.degree?.name) name += ` - ${item.degree.name}`;
+    if (item.university?.name) name += ` - ${item.university.name}`;
+    if (item.exam?.name) name += ` - ${item.exam.name}`;
     return name;
   };
 
@@ -279,6 +346,31 @@ const AudioLectureManagement = () => {
     if (isNaN(numericPrice)) return "0.00";
     
     return numericPrice.toFixed(2);
+  };
+
+  // Get current audio lectures based on active tab
+  const getCurrentAudioLectures = () => {
+    return activeTab === "subjects" ? subjectAudioLectures : courseAudioLectures;
+  };
+
+  // Get current units based on active tab
+  const getCurrentUnits = () => {
+    return activeTab === "subjects" ? subjectUnits : courseUnits;
+  };
+
+  // Get current selected ID based on active tab
+  const getCurrentSelectedId = () => {
+    return activeTab === "subjects" ? selectedSubject : selectedCourse;
+  };
+
+  // Get current selected unit based on active tab
+  const getCurrentSelectedUnit = () => {
+    return activeTab === "subjects" ? selectedSubjectUnit : selectedCourseUnit;
+  };
+
+  // Get current filtered items based on active tab
+  const getCurrentFilteredItems = () => {
+    return activeTab === "subjects" ? filteredSubjects : filteredCourses;
   };
 
   // Get file extension from filename
@@ -372,7 +464,7 @@ const AudioLectureManagement = () => {
       // Create audio element for playback
       const newAudioElement = new Audio(audioObjectUrl);
       
-      newAudioElement.onerror = (e) => {
+      newAudioElement.onerror = (e) =>{
         console.error("Audio element error:", e);
         dispatch(setAudioError("Failed to play audio: The file may be corrupted or in an unsupported format."));
         dispatch(setPlayingAudio(null));
@@ -406,6 +498,22 @@ const AudioLectureManagement = () => {
       <div className="bg-white shadow rounded-lg p-6 max-w-6xl mx-auto">
         <h2 className="text-2xl font-bold mb-4">Audio Lecture Management</h2>
 
+        {/* Tabs for Subjects and Courses */}
+        <div className="flex border-b mb-6">
+          <button
+            className={`py-2 px-4 font-medium ${activeTab === "subjects" ? "border-b-2 border-blue-500 text-blue-600" : "text-gray-500"}`}
+            onClick={() => dispatch(setActiveTab("subjects"))}
+          >
+            Subject Audios
+          </button>
+          <button
+            className={`py-2 px-4 font-medium ${activeTab === "courses" ? "border-b-2 border-blue-500 text-blue-600" : "text-gray-500"}`}
+            onClick={() => dispatch(setActiveTab("courses"))}
+          >
+            Course Audios
+          </button>
+        </div>
+
         {/* Audio Error Alert */}
         {audioError && (
           <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded relative">
@@ -428,17 +536,19 @@ const AudioLectureManagement = () => {
 
         {/* Filters Section */}
         <div className="mb-6 p-4 border rounded-lg bg-gray-50">
-          <h3 className="text-lg font-semibold mb-3">Filter Subjects</h3>
+          <h3 className="text-lg font-semibold mb-3">Filter {activeTab === "subjects" ? "Subjects" : "Courses"}</h3>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Subject Name</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                {activeTab === "subjects" ? "Subject Name" : "Course Name"}
+              </label>
               <select
                 className="w-full border border-gray-300 rounded-lg p-2"
-                value={filters.subjectName}
-                onChange={(e) => handleFilterChange('subjectName', e.target.value)}
+                value={filters.name}
+                onChange={(e) => handleFilterChange('name', e.target.value)}
               >
-                <option value="">All Subjects</option>
-                {filterOptions.subjectNames.map((name, index) => (
+                <option value="">All {activeTab === "subjects" ? "Subjects" : "Courses"}</option>
+                {filterOptions.names.map((name, index) => (
                   <option key={index} value={name}>{name}</option>
                 ))}
               </select>
@@ -453,21 +563,7 @@ const AudioLectureManagement = () => {
               >
                 <option value="">All Grades</option>
                 {filterOptions.grades.map((grade, index) => (
-                  <option key={index} value={grade}>{grade}</option>
-                ))}
-              </select>
-            </div>
-            
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Stream</label>
-              <select
-                className="w-full border border-gray-300 rounded-lg p-2"
-                value={filters.stream}
-                onChange={(e) => handleFilterChange('stream', e.target.value)}
-              >
-                <option value="">All Streams</option>
-                {filterOptions.streams.map((stream, index) => (
-                  <option key={index} value={stream}>{stream}</option>
+                  <option key={index}value={grade}>{grade}</option>
                 ))}
               </select>
             </div>
@@ -515,6 +611,20 @@ const AudioLectureManagement = () => {
             </div>
 
             <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Exam</label>
+              <select
+                className="w-full border border-gray-300 rounded-lg p-2"
+                value={filters.exam}
+                onChange={(e) => handleFilterChange('exam', e.target.value)}
+              >
+                <option value="">All Exams</option>
+                {filterOptions.exams.map((exam, index) => (
+                  <option key={index} value={exam}>{exam}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Access Type</label>
               <select
                 className="w-full border border-gray-300 rounded-lg p-2"
@@ -538,31 +648,26 @@ const AudioLectureManagement = () => {
           </div>
         </div>
 
-        {/* Subject and Unit Selection */}
+        {/* Subject/Course and Unit Selection */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Select Subject
+              Select {activeTab === "subjects" ? "Subject" : "Course"}
             </label>
             <select
               className="w-full border border-gray-300 rounded-lg p-2"
-              value={selectedSubject}
-              onChange={(e) => {
-                dispatch(setSelectedSubject(e.target.value));
-                if (e.target.value) {
-                  dispatch(fetchUnits(e.target.value));
-                }
-              }}
+              value={getCurrentSelectedId()}
+              onChange={(e) => handleSelectItem(e.target.value)}
             >
-              <option value="">-- Select Subject --</option>
-              {filteredSubjects.map((subject) => (
-                <option key={subject.id} value={subject.id}>
-                  {formatSubjectName(subject)}
+              <option value="">-- Select {activeTab === "subjects" ? "Subject" : "Course"} --</option>
+              {getCurrentFilteredItems().map((item) => (
+                <option key={item.id} value={item.id}>
+                  {formatName(item)}
                 </option>
               ))}
             </select>
             <p className="text-sm text-gray-500 mt-1">
-              {filteredSubjects.length} subject(s) found
+              {getCurrentFilteredItems().length} {activeTab === "subjects" ? "subject(s)" : "course(s)"} found
             </p>
           </div>
 
@@ -572,17 +677,12 @@ const AudioLectureManagement = () => {
             </label>
             <select
               className="w-full border border-gray-300 rounded-lg p-2"
-              value={selectedUnit}
-              onChange={(e) => {
-                dispatch(setSelectedUnit(e.target.value));
-                if (e.target.value) {
-                  dispatch(fetchAudioLectures({ unitId: e.target.value, accessTypeFilter: filters.accessTypes }));
-                }
-              }}
-              disabled={!selectedSubject}
+              value={getCurrentSelectedUnit()}
+              onChange={(e) => handleSelectUnit(e.target.value)}
+              disabled={!getCurrentSelectedId()}
             >
               <option value="">-- Select Unit --</option>
-              {units.map((unit) => (
+              {getCurrentUnits().map((unit) => (
                 <option key={unit.id} value={unit.id}>
                   {unit.name}
                 </option>
@@ -592,10 +692,10 @@ const AudioLectureManagement = () => {
         </div>
 
         {/* Add/Edit Audio Lecture Form */}
-        {selectedUnit && (
+        {getCurrentSelectedUnit() && (
           <form onSubmit={editingAudio ? handleUpdateAudioLecture : handleAddAudioLecture} className="mb-6 bg-gray-50 p-4 rounded-lg">
             <h3 className="text-lg font-semibold mb-4">
-              {editingAudio ? 'Edit Audio Lecture' : 'Add New Audio Lecture'}
+              {editingAudio ? 'Edit Audio Lecture' : `Add New Audio Lecture to ${activeTab === "subjects" ? "Subject" : "Course"}`}
             </h3>
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
@@ -659,14 +759,27 @@ const AudioLectureManagement = () => {
                   />
                 </div>
               )}
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Validity Days</label>
+                <input
+                  type="number"
+                  className="w-full border border-gray-300 rounded-lg p-2"
+                  value={validityDays}
+                  onChange={(e) => dispatch(setValidityDays(e.target.value))}
+                  min="0"
+                  placeholder="0 = No expiry"
+                />
+              </div>
             </div>
             
             <div className="flex items-center gap-2">
               <button
                 type="submit"
                 className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
+                disabled={loading}
               >
-                {editingAudio ? 'Update Audio Lecture' : 'Add Audio Lecture'}
+                {loading ? 'Processing...' : (editingAudio ? 'Update Audio Lecture' : 'Add Audio Lecture')}
               </button>
               {editingAudio && (
                 <button
@@ -695,23 +808,25 @@ const AudioLectureManagement = () => {
         )}
 
         {/* Audio Lectures List */}
-        {selectedUnit && (
+        {getCurrentSelectedUnit() && (
           <>
             <h3 className="text-lg font-semibold mb-4">Audio Lectures</h3>
             {loading ? (
-              <p>Loading audio lectures...</p>
-            ) : audioLectures.length === 0 ? (
+              <div className="flex justify-center py-10">
+                <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600"></div>
+              </div>
+            ) : getCurrentAudioLectures().length === 0 ? (
               <p>No audio lectures found for this unit.</p>
             ) : (
               <div className="space-y-4">
-                {audioLectures.map((audio) => (
+                {getCurrentAudioLectures().map((audio) => (
                   <div key={audio.id} className="bg-white p-4 rounded-lg shadow">
                     <div className="flex flex-col md:flex-row md:items-center md:justify-between">
                       <div>
                         <h4 className="text-md font-semibold">{audio.title}</h4>
                         <p className="text-sm text-gray-600">{audio.description}</p>
                         <p className="text-sm text-gray-600">
-                          Duration: {audio.duration || 'N/A'} mins | Access: {audio.accessTypes} | Price: ${formatPrice(audio.price)}
+                          Duration: {audio.duration || 'N/A'} mins | Access: {audio.accessTypes} | Price: ${formatPrice(audio.price)} | Validity: {audio.validityDays || 'No expiry'} days
                         </p>
                       </div>
                       

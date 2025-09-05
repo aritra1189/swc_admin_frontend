@@ -2,15 +2,17 @@
 import React, { useEffect } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import {
-  fetchSubjects,
+  fetchSubjectsAndCourses,
   fetchUnits,
   fetchMcqTests,
-  fetchMcqTestsByUser,
   addMcqTest,
   updateMcqTest,
   uploadThumbnail,
+  setActiveTab,
   setSelectedSubject,
-  setSelectedUnit,
+  setSelectedCourse,
+  setSelectedSubjectUnit,
+  setSelectedCourseUnit,
   setTitle,
   setDescription,
   setTimeLimit,
@@ -21,7 +23,7 @@ import {
   clearFilters,
   setMessage,
   resetForm,
-  setUserView,
+  setvalidityDays, // Add this import
 } from "../store/McqTestSlice";
 import { API_BASE_URL } from "../config/api";
 
@@ -30,13 +32,18 @@ const useMcqTestState = () => {
   const state = useSelector((state) => state.mcqTest || {});
   
   return {
+    activeTab: state.activeTab || "subjects",
     subjects: state.subjects || [],
-    units: state.units || [],
-    filteredSubjects: state.filteredSubjects || [],
-    mcqTests: state.mcqTests || [],
+    courses: state.courses || [],
+    subjectUnits: state.subjectUnits || [],
+    courseUnits: state.courseUnits || [],
+    subjectMcqTests: state.subjectMcqTests || [],
+    courseMcqTests: state.courseMcqTests || [],
     loading: state.loading || false,
     selectedSubject: state.selectedSubject || "",
-    selectedUnit: state.selectedUnit || "",
+    selectedCourse: state.selectedCourse || "",
+    selectedSubjectUnit: state.selectedSubjectUnit || "",
+    selectedCourseUnit: state.selectedCourseUnit || "",
     message: state.message || "",
     title: state.title || "",
     description: state.description || "",
@@ -44,14 +51,16 @@ const useMcqTestState = () => {
     price: state.price || 0,
     accessTypes: state.accessTypes || "FREE",
     editingTest: state.editingTest || null,
+    validityDays: state.validityDays || 0, // Add this line
     filters: state.filters || {
       grade: "",
       stream: "",
       semester: "",
       degree: "",
       university: "",
-      subjectName: "",
-      accessTypes: ""
+      name: "",
+      accessTypes: "",
+      exam: ""
     },
     filterOptions: state.filterOptions || {
       grades: [],
@@ -59,9 +68,11 @@ const useMcqTestState = () => {
       semesters: [],
       degrees: [],
       universities: [],
-      subjectNames: []
+      names: [],
+      exams: []
     },
-    userView: state.userView || false,
+    filteredSubjects: state.filteredSubjects || [],
+    filteredCourses: state.filteredCourses || [],
   };
 };
 
@@ -70,13 +81,18 @@ const McqTestManagement = () => {
   const state = useMcqTestState();
   
   const {
+    activeTab,
     subjects,
-    units,
-    filteredSubjects,
-    mcqTests,
+    courses,
+    subjectUnits,
+    courseUnits,
+    subjectMcqTests,
+    courseMcqTests,
     loading,
     selectedSubject,
-    selectedUnit,
+    selectedCourse,
+    selectedSubjectUnit,
+    selectedCourseUnit,
     message,
     title,
     description,
@@ -84,39 +100,17 @@ const McqTestManagement = () => {
     price,
     accessTypes,
     editingTest,
+    validityDays, // Add this line
     filters,
     filterOptions,
-    userView,
+    filteredSubjects,
+    filteredCourses,
   } = state;
 
-  // Fetch subjects on mount
+  // Fetch subjects and courses on mount
   useEffect(() => {
-    dispatch(fetchSubjects());
+    dispatch(fetchSubjectsAndCourses());
   }, [dispatch]);
-
-  // Fetch units when subject is selected
-  useEffect(() => {
-    if (selectedSubject) {
-      dispatch(fetchUnits(selectedSubject));
-    }
-  }, [selectedSubject, dispatch]);
-
-  // Fetch MCQ tests when unit is selected or filters change
-  useEffect(() => {
-    if (selectedUnit) {
-      if (userView) {
-        dispatch(fetchMcqTestsByUser({ 
-          unitId: selectedUnit, 
-          accessTypeFilter: filters.accessTypes 
-        }));
-      } else {
-        dispatch(fetchMcqTests({ 
-          unitId: selectedUnit, 
-          accessTypeFilter: filters.accessTypes 
-        }));
-      }
-    }
-  }, [selectedUnit, filters.accessTypes, userView, dispatch]);
 
   // Function to fix thumbnail URL
   const fixThumbnailUrl = (url) => {
@@ -127,44 +121,75 @@ const McqTestManagement = () => {
     
     // If the URL contains localhost but our API_BASE_URL is different, replace it
     if (fixedUrl.includes('localhost') && !API_BASE_URL.includes('localhost')) {
+      // Extract the path part after the host
       const urlPath = fixedUrl.split('/').slice(3).join('/');
+      // Construct new URL with the correct base
       fixedUrl = `${API_BASE_URL}/${urlPath}`;
     }
     
     return fixedUrl;
   };
 
+  // Fetch units when subject/course is selected
+  const handleSelectItem = (id) => {
+    if (activeTab === "subjects") {
+      dispatch(setSelectedSubject(id));
+    } else {
+      dispatch(setSelectedCourse(id));
+    }
+    
+    if (id) {
+      dispatch(fetchUnits({ id, type: activeTab }));
+    }
+  };
+
+  // Fetch MCQ tests when unit is selected
+  const handleSelectUnit = (unitId) => {
+    if (activeTab === "subjects") {
+      dispatch(setSelectedSubjectUnit(unitId));
+    } else {
+      dispatch(setSelectedCourseUnit(unitId));
+    }
+    
+    if (unitId) {
+      dispatch(fetchMcqTests({ unitId, accessTypeFilter: filters.accessTypes }));
+    }
+  };
+
   // Add new MCQ test
   const handleAddMcqTest = async (e) => {
     e.preventDefault();
-    if (!selectedSubject || !selectedUnit || !title.trim()) {
+    
+    const selectedId = activeTab === "subjects" ? selectedSubject : selectedCourse;
+    const selectedUnit = activeTab === "subjects" ? selectedSubjectUnit : selectedCourseUnit;
+    
+    if (!selectedId || !selectedUnit || !title.trim()) {
       dispatch(setMessage("Please fill all required fields."));
       return;
     }
 
     try {
-      await dispatch(addMcqTest({
-        subjectId: selectedSubject,
-        unitId: selectedUnit,
+      const testData = {
         title,
         description,
         timeLimit: parseInt(timeLimit) || 30,
         price: accessTypes === "PAID" ? parseFloat(price) : 0,
-        accessTypes
-      })).unwrap();
+        accessTypes,
+        unitId: selectedUnit,
+        validityDays: parseInt(validityDays) || 0, // Add this line
+      };
+      
+      // Add the appropriate ID based on active tab
+      if (activeTab === "subjects") {
+        testData.subjectId = selectedSubject;
+      } else {
+        testData.courseId = selectedCourse;
+      }
+
+      await dispatch(addMcqTest(testData)).unwrap();
       
       dispatch(resetForm());
-      if (userView) {
-        dispatch(fetchMcqTestsByUser({ 
-          unitId: selectedUnit, 
-          accessTypeFilter: filters.accessTypes 
-        }));
-      } else {
-        dispatch(fetchMcqTests({ 
-          unitId: selectedUnit, 
-          accessTypeFilter: filters.accessTypes 
-        }));
-      }
+      dispatch(fetchMcqTests({ unitId: selectedUnit, accessTypeFilter: filters.accessTypes }));
     } catch (err) {
       console.error("Error adding MCQ test:", err);
     }
@@ -179,29 +204,23 @@ const McqTestManagement = () => {
     }
 
     try {
+      const updateData = {
+        title,
+        description,
+        timeLimit: parseInt(timeLimit) || 30,
+        price: accessTypes === "PAID" ? parseFloat(price) : 0,
+        accessTypes,
+        validityDays: parseInt(validityDays) || 0, // Add this line
+      };
+
       await dispatch(updateMcqTest({
         id: editingTest.id,
-        data: {
-          title,
-          description,
-          timeLimit: parseInt(timeLimit) || 30,
-          price: accessTypes === "PAID" ? parseFloat(price) : 0,
-          accessTypes
-        }
+        data: updateData
       })).unwrap();
       
       dispatch(resetForm());
-      if (userView) {
-        dispatch(fetchMcqTestsByUser({ 
-          unitId: selectedUnit, 
-          accessTypeFilter: filters.accessTypes 
-        }));
-      } else {
-        dispatch(fetchMcqTests({ 
-          unitId: selectedUnit, 
-          accessTypeFilter: filters.accessTypes 
-        }));
-      }
+      const selectedUnit = activeTab === "subjects" ? selectedSubjectUnit : selectedCourseUnit;
+      dispatch(fetchMcqTests({ unitId: selectedUnit, accessTypeFilter: filters.accessTypes }));
     } catch (err) {
       console.error("Error updating MCQ test:", err);
     }
@@ -210,6 +229,12 @@ const McqTestManagement = () => {
   // Handle edit MCQ test
   const handleEditMcqTest = (test) => {
     dispatch(setEditingTest(test));
+    dispatch(setTitle(test.title || ""));
+    dispatch(setDescription(test.description || ""));
+    dispatch(setTimeLimit(test.timeLimit || 30));
+    dispatch(setPrice(test.price || 0));
+    dispatch(setAccessTypes(test.accessTypes || "FREE"));
+    dispatch(setvalidityDays(test.validityDays || 0)); // Add this line
   };
 
   // Cancel edit
@@ -222,17 +247,8 @@ const McqTestManagement = () => {
     try {
       dispatch(setMessage("⏳ Uploading thumbnail..."));
       await dispatch(uploadThumbnail({ testId, file })).unwrap();
-      if (userView) {
-        dispatch(fetchMcqTestsByUser({ 
-          unitId: selectedUnit, 
-          accessTypeFilter: filters.accessTypes 
-        }));
-      } else {
-        dispatch(fetchMcqTests({ 
-          unitId: selectedUnit, 
-          accessTypeFilter: filters.accessTypes 
-        }));
-      }
+      const selectedUnit = activeTab === "subjects" ? selectedSubjectUnit : selectedCourseUnit;
+      dispatch(fetchMcqTests({ unitId: selectedUnit, accessTypeFilter: filters.accessTypes }));
     } catch (err) {
       console.error("Error uploading thumbnail:", err);
     }
@@ -248,22 +264,22 @@ const McqTestManagement = () => {
     dispatch(clearFilters());
   };
 
-  // Toggle between admin and user view
-  const toggleView = () => {
-    dispatch(setUserView(!userView));
-    dispatch(resetForm());
-    dispatch(setSelectedSubject(""));
-    dispatch(setSelectedUnit(""));
-  };
-
-  // Format subject display name with all relevant information
-  const formatSubjectName = (subject) => {
-    let name = subject.subMaster?.name || 'Unknown Subject';
-    if (subject.grade?.name) name += ` - ${subject.grade.name}`;
-    if (subject.stream?.name) name += ` - ${subject.stream.name}`;
-    if (subject.semester?.name) name += ` - ${subject.semester.name}`;
-    if (subject.degree?.name) name += ` - ${subject.degree.name}`;
-    if (subject.university?.name) name += ` - ${subject.university.name}`;
+  // Format display name with all relevant information
+  const formatName = (item) => {
+    let name = "";
+    
+    if (activeTab === "subjects") {
+      name = item.subMaster?.name || "Unnamed Subject";
+    } else {
+      name = item.name || "Unnamed Course";
+    }
+    
+    if (item.grade?.name) name += ` - ${item.grade.name}`;
+    if (item.stream?.name) name += ` - ${item.stream.name}`;
+    if (item.semester?.name) name += ` - ${item.semester.name}`;
+    if (item.degree?.name) name += ` - ${item.degree.name}`;
+    if (item.university?.name) name += ` - ${item.university.name}`;
+    if (item.exam?.name) name += ` - ${item.exam.name}`;
     return name;
   };
 
@@ -271,39 +287,113 @@ const McqTestManagement = () => {
   const formatPrice = (priceValue) => {
     if (priceValue === null || priceValue === undefined) return "0.00";
     
+    // Convert to number if it's a string
     const numericPrice = typeof priceValue === 'string' ? parseFloat(priceValue) : priceValue;
     
+    // Check if it's a valid number
     if (isNaN(numericPrice)) return "0.00";
     
     return numericPrice.toFixed(2);
   };
 
+  // Get current MCQ tests based on active tab
+  const getCurrentMcqTests = () => {
+    return activeTab === "subjects" ? subjectMcqTests : courseMcqTests;
+  };
+
+  // Get current units based on active tab
+  const getCurrentUnits = () => {
+    return activeTab === "subjects" ? subjectUnits : courseUnits;
+  };
+
+  // Get current selected ID based on active tab
+  const getCurrentSelectedId = () => {
+    return activeTab === "subjects" ? selectedSubject : selectedCourse;
+  };
+
+  // Get current selected unit based on active tab
+  const getCurrentSelectedUnit = () => {
+    return activeTab === "subjects" ? selectedSubjectUnit : selectedCourseUnit;
+  };
+
+  // Get current filtered items based on active tab
+  const getCurrentFilteredItems = () => {
+    return activeTab === "subjects" ? filteredSubjects : filteredCourses;
+  };
+
   return (
     <div className="p-6 bg-gray-100 min-h-screen">
+      <div className="max-w-6xl mx-auto mb-6">
+        <div className="relative overflow-hidden bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 p-[1px] rounded-xl shadow-lg">
+          <div className="bg-white rounded-xl p-6 relative">
+            <div className="flex items-start space-x-4">
+              <div className="flex-shrink-0">
+                <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center shadow-lg">
+                  <span className="text-white text-xl">📋</span>
+                </div>
+              </div>
+              <div className="flex-1">
+                <h3 className="text-lg font-bold text-gray-900 mb-2 flex items-center">
+                  <span className="bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+                    Test Naming Convention
+                  </span>
+                  <span className="ml-2 px-2 py-1 bg-red-100 text-red-600 text-xs font-semibold rounded-full animate-pulse">
+                    Required
+                  </span>
+                </h3>
+                <p className="text-gray-700 text-sm mb-3 leading-relaxed">
+                  Every test name must be <strong>unique</strong> and follow this exact format:
+                </p>
+                <div className="bg-gradient-to-r from-gray-50 to-blue-50 border border-gray-200 rounded-lg p-4">
+                  <code className="text-sm font-mono text-gray-800 break-all">
+                    Subject Name - Grade/Degree - Board/University - Grade/Semester - Stream(for Higher Secondary) - Semester(for WBCHSE Only) - Exam
+                  </code>
+                </div>
+                <div className="mt-3 flex items-center text-xs text-gray-500">
+                  <svg className="w-4 h-4 mr-1 text-green-500" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                  </svg>
+                  This ensures proper organization and prevents duplicates
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
       <div className="bg-white shadow rounded-lg p-6 max-w-6xl mx-auto">
-        <div className="flex justify-between items-center mb-6">
-          <h2 className="text-2xl font-bold">MCQ Test Management</h2>
+        <h2 className="text-2xl font-bold mb-4">MCQ Test Management</h2>
+
+        {/* Tabs for Subjects and Courses */}
+        <div className="flex border-b mb-6">
           <button
-            onClick={toggleView}
-            className="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded"
+            className={`py-2 px-4 font-medium ${activeTab === "subjects" ? "border-b-2 border-blue-500 text-blue-600" : "text-gray-500"}`}
+            onClick={() => dispatch(setActiveTab("subjects"))}
           >
-            {userView ? 'Admin View' : 'User View'}
+            Subject Tests
+          </button>
+          <button
+            className={`py-2 px-4 font-medium ${activeTab === "courses" ? "border-b-2 border-blue-500 text-blue-600" : "text-gray-500"}`}
+            onClick={() => dispatch(setActiveTab("courses"))}
+          >
+            Course Tests
           </button>
         </div>
 
         {/* Filters Section */}
         <div className="mb-6 p-4 border rounded-lg bg-gray-50">
-          <h3 className="text-lg font-semibold mb-3">Filter Subjects</h3>
+          <h3 className="text-lg font-semibold mb-3">Filter {activeTab === "subjects" ? "Subjects" : "Courses"}</h3>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Subject Name</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                {activeTab === "subjects" ? "Subject Name" : "Course Name"}
+              </label>
               <select
                 className="w-full border border-gray-300 rounded-lg p-2"
-                value={filters.subjectName}
-                onChange={(e) => handleFilterChange('subjectName', e.target.value)}
+                value={filters.name}
+                onChange={(e) => handleFilterChange('name', e.target.value)}
               >
-                <option value="">All Subjects</option>
-                {filterOptions.subjectNames.map((name, index) => (
+                <option value="">All {activeTab === "subjects" ? "Subjects" : "Courses"}</option>
+                {filterOptions.names.map((name, index) => (
                   <option key={index} value={name}>{name}</option>
                 ))}
               </select>
@@ -380,6 +470,20 @@ const McqTestManagement = () => {
             </div>
 
             <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Exam</label>
+              <select
+                className="w-full border border-gray-300 rounded-lg p-2"
+                value={filters.exam}
+                onChange={(e) => handleFilterChange('exam', e.target.value)}
+              >
+                <option value="">All Exams</option>
+                {filterOptions.exams.map((exam, index) => (
+                  <option key={index} value={exam}>{exam}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Access Type</label>
               <select
                 className="w-full border border-gray-300 rounded-lg p-2"
@@ -389,7 +493,6 @@ const McqTestManagement = () => {
                 <option value="">All Types</option>
                 <option value="FREE">Free</option>
                 <option value="PAID">Paid</option>
-                <option value="PREMIUM">Premium</option>
               </select>
             </div>
           </div>
@@ -404,31 +507,26 @@ const McqTestManagement = () => {
           </div>
         </div>
 
-        {/* Subject and Unit Selection */}
+        {/* Subject/Course and Unit Selection */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Select Subject
+              Select {activeTab === "subjects" ? "Subject" : "Course"}
             </label>
             <select
               className="w-full border border-gray-300 rounded-lg p-2"
-              value={selectedSubject}
-              onChange={(e) => {
-                dispatch(setSelectedSubject(e.target.value));
-                if (e.target.value) {
-                  dispatch(fetchUnits(e.target.value));
-                }
-              }}
+              value={getCurrentSelectedId()}
+              onChange={(e) => handleSelectItem(e.target.value)}
             >
-              <option value="">-- Select Subject --</option>
-              {filteredSubjects.map((subject) => (
-                <option key={subject.id} value={subject.id}>
-                  {formatSubjectName(subject)}
+              <option value="">-- Select {activeTab === "subjects" ? "Subject" : "Course"} --</option>
+              {getCurrentFilteredItems().map((item) => (
+                <option key={item.id} value={item.id}>
+                  {formatName(item)}
                 </option>
               ))}
             </select>
             <p className="text-sm text-gray-500 mt-1">
-              {filteredSubjects.length} subject(s) found
+              {getCurrentFilteredItems().length} {activeTab === "subjects" ? "subject(s)" : "course(s)"} found
             </p>
           </div>
 
@@ -438,27 +536,12 @@ const McqTestManagement = () => {
             </label>
             <select
               className="w-full border border-gray-300 rounded-lg p-2"
-              value={selectedUnit}
-              onChange={(e) => {
-                dispatch(setSelectedUnit(e.target.value));
-                if (e.target.value) {
-                  if (userView) {
-                    dispatch(fetchMcqTestsByUser({ 
-                      unitId: e.target.value, 
-                      accessTypeFilter: filters.accessTypes 
-                    }));
-                  } else {
-                    dispatch(fetchMcqTests({ 
-                      unitId: e.target.value, 
-                      accessTypeFilter: filters.accessTypes 
-                    }));
-                  }
-                }
-              }}
-              disabled={!selectedSubject}
+              value={getCurrentSelectedUnit()}
+              onChange={(e) => handleSelectUnit(e.target.value)}
+              disabled={!getCurrentSelectedId()}
             >
               <option value="">-- Select Unit --</option>
-              {units.map((unit) => (
+              {getCurrentUnits().map((unit) => (
                 <option key={unit.id} value={unit.id}>
                   {unit.name}
                 </option>
@@ -467,11 +550,11 @@ const McqTestManagement = () => {
           </div>
         </div>
 
-        {/* Add/Edit MCQ Test Form (Only in Admin View) */}
-        {!userView && selectedUnit && (
+        {/* Add/Edit MCQ Test Form */}
+        {getCurrentSelectedUnit() && (
           <form onSubmit={editingTest ? handleUpdateMcqTest : handleAddMcqTest} className="mb-6 bg-gray-50 p-4 rounded-lg">
             <h3 className="text-lg font-semibold mb-4">
-              {editingTest ? 'Edit MCQ Test' : 'Add New MCQ Test'}
+              {editingTest ? 'Edit MCQ Test' : `Add New MCQ Test to ${activeTab === "subjects" ? "Subject" : "Course"}`}
             </h3>
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
@@ -519,11 +602,10 @@ const McqTestManagement = () => {
                 >
                   <option value="FREE">Free</option>
                   <option value="PAID">Paid</option>
-                  <option value="PREMIUM">Premium</option>
                 </select>
               </div>
               
-              {accessTypes !== "FREE" && (
+              {accessTypes === "PAID" && (
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Price ($)</label>
                   <input
@@ -533,18 +615,31 @@ const McqTestManagement = () => {
                     onChange={(e) => dispatch(setPrice(e.target.value))}
                     min="0"
                     step="0.01"
-                    required={accessTypes !== "FREE"}
+                    required={accessTypes === "PAID"}
                   />
                 </div>
               )}
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Validity (days) *</label>
+                <input
+                  type="number"
+                  className="w-full border border-gray-300 rounded-lg p-2"
+                  value={validityDays}
+                  onChange={(e) => dispatch(setvalidityDays(parseInt(e.target.value) || 0))}
+                  min="1"
+                  required
+                />
+              </div>
             </div>
             
             <div className="flex items-center gap-2">
               <button
                 type="submit"
                 className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
+                disabled={loading}
               >
-                {editingTest ? 'Update MCQ Test' : 'Add MCQ Test'}
+                {loading ? 'Processing...' : (editingTest ? 'Update MCQ Test' : 'Add MCQ Test')}
               </button>
               {editingTest && (
                 <button
@@ -573,16 +668,18 @@ const McqTestManagement = () => {
         )}
 
         {/* MCQ Tests List */}
-        {selectedUnit && (
+        {getCurrentSelectedUnit() && (
           <>
             <h3 className="text-lg font-semibold mb-4">MCQ Tests</h3>
             {loading ? (
-              <p>Loading MCQ tests...</p>
-            ) : mcqTests.length === 0 ? (
+              <div className="flex justify-center py-10">
+                <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600"></div>
+              </div>
+            ) : getCurrentMcqTests().length === 0 ? (
               <p>No MCQ tests found for this unit.</p>
             ) : (
               <div className="space-y-4">
-                {mcqTests.map((test) => (
+                {getCurrentMcqTests().map((test) => (
                   <div key={test.id} className="bg-white p-4 rounded-lg shadow">
                     <div className="flex flex-col md:flex-row md:items-center md:justify-between">
                       <div className="flex items-start gap-4">
@@ -599,49 +696,48 @@ const McqTestManagement = () => {
                           <h4 className="text-md font-semibold">{test.title}</h4>
                           <p className="text-sm text-gray-600">{test.description}</p>
                           <p className="text-sm text-gray-600">
-                            Time Limit: {test.timeLimit || 'N/A'} mins | Access: {test.accessTypes} | Price: ${formatPrice(test.price)}
+                            Time Limit: {test.timeLimit || 'N/A'} mins | Access: {test.accessTypes} | 
+                            Price: ${formatPrice(test.price)} | Validity: {test.validityDays || 0} days
                           </p>
                         </div>
                       </div>
                       
-                      {!userView && (
-                        <div className="mt-3 md:mt-0 flex items-center gap-3">
-                          {/* Upload Thumbnail */}
-                          <label className="bg-purple-600 hover:bg-purple-700 text-white px-3 py-1 rounded-lg cursor-pointer">
-                            Upload Thumbnail
-                            <input
-                              type="file"
-                              accept="image/*"
-                              className="hidden"
-                              onChange={(e) => {
-                                if (e.target.files.length > 0) {
-                                  handleThumbnailUpload(e.target.files[0], test.id);
-                                  e.target.value = null; // Reset file input
-                                }
-                              }}
-                            />
-                          </label>
-                          
-                          {/* Edit Button */}
-                          <button
-                            onClick={() => handleEditMcqTest(test)}
-                            className="bg-yellow-500 hover:bg-yellow-600 text-white px-3 py-1 rounded-lg"
-                          >
-                            Edit
-                          </button>
-                          
-                          {/* View Questions Button */}
-                          <button
-                            onClick={() => {
-                              // Navigate to questions management for this test
-                              console.log("Navigate to questions for test:", test.id);
+                      <div className="mt-3 md:mt-0 flex items-center gap-3">
+                        {/* Upload Thumbnail */}
+                        <label className="bg-purple-600 hover:bg-purple-700 text-white px-3 py-1 rounded-lg cursor-pointer">
+                          Upload Thumbnail
+                          <input
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={(e) => {
+                              if (e.target.files.length > 0) {
+                                handleThumbnailUpload(e.target.files[0], test.id);
+                                e.target.value = null; // Reset file input
+                              }
                             }}
-                            className="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded-lg"
-                          >
-                            Questions
-                          </button>
-                        </div>
-                      )}
+                          />
+                        </label>
+                        
+                        {/* Edit Button */}
+                        <button
+                          onClick={() => handleEditMcqTest(test)}
+                          className="bg-yellow-500 hover:bg-yellow-600 text-white px-3 py-1 rounded-lg"
+                        >
+                          Edit
+                        </button>
+                        
+                        {/* View Questions Button */}
+                        <button
+                          onClick={() => {
+                            // Navigate to questions management for this test
+                            console.log("Navigate to questions for test:", test.id);
+                          }}
+                          className="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded-lg"
+                        >
+                          Questions
+                        </button>
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -652,6 +748,6 @@ const McqTestManagement = () => {
       </div>
     </div>
   );
-}
+};
 
 export default McqTestManagement;

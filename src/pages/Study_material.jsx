@@ -23,13 +23,26 @@ api.interceptors.request.use(
 );
 
 const StudyMaterialManagement = () => {
+  const [activeTab, setActiveTab] = useState("subjects"); // 'subjects' or 'courses'
+  
+  // State for subjects
   const [subjects, setSubjects] = useState([]);
-  const [units, setUnits] = useState([]);
+  const [subjectUnits, setSubjectUnits] = useState([]);
   const [filteredSubjects, setFilteredSubjects] = useState([]);
-  const [loading, setLoading] = useState(false);
   const [selectedSubject, setSelectedSubject] = useState("");
-  const [selectedUnit, setSelectedUnit] = useState("");
-  const [studyMaterials, setStudyMaterials] = useState([]);
+  const [selectedSubjectUnit, setSelectedSubjectUnit] = useState("");
+  const [subjectStudyMaterials, setSubjectStudyMaterials] = useState([]);
+  
+  // State for courses
+  const [courses, setCourses] = useState([]);
+  const [courseUnits, setCourseUnits] = useState([]);
+  const [filteredCourses, setFilteredCourses] = useState([]);
+  const [selectedCourse, setSelectedCourse] = useState("");
+  const [selectedCourseUnit, setSelectedCourseUnit] = useState("");
+  const [courseStudyMaterials, setCourseStudyMaterials] = useState([]);
+  
+  // Common states
+  const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
   
   // Form states
@@ -37,7 +50,9 @@ const StudyMaterialManagement = () => {
   const [description, setDescription] = useState("");
   const [price, setPrice] = useState(0);
   const [accessTypes, setAccessTypes] = useState("FREE");
+  const [validityDays, setValidityDays] = useState(0); // Added validityDays state
   const [editingMaterial, setEditingMaterial] = useState(null);
+  const [selectedFile, setSelectedFile] = useState(null);
   
   // Filter states
   const [filters, setFilters] = useState({
@@ -46,7 +61,7 @@ const StudyMaterialManagement = () => {
     semester: "",
     degree: "",
     university: "",
-    subjectName: "",
+    name: "",
     accessTypes: ""
   });
   
@@ -57,7 +72,7 @@ const StudyMaterialManagement = () => {
     semesters: [],
     degrees: [],
     universities: [],
-    subjectNames: []
+    names: []
   });
 
   // Supported file formats
@@ -88,12 +103,14 @@ const StudyMaterialManagement = () => {
     return supportedFormats.includes(extension);
   };
 
-  // Fetch subjects
+  // Fetch subjects and courses
   useEffect(() => {
-    const fetchSubjects = async () => {
+    const fetchData = async () => {
       try {
         setLoading(true);
-        const res = await api.get('/subject/list', {
+        
+        // Fetch subjects
+        const subjectsRes = await api.get('/subject/list', {
           params: {
             limit: 100,
             offset: 0,
@@ -101,18 +118,33 @@ const StudyMaterialManagement = () => {
           }
         });
         
-        // Extract subject data from the response
-        const subjectData = res.data?.result || [];
+        const subjectData = subjectsRes.data?.result || [];
         setSubjects(subjectData);
         setFilteredSubjects(subjectData);
         
-        // Extract unique values for filters
-        const grades = [...new Set(subjectData.map(item => item.grade?.name).filter(Boolean))];
-        const streams = [...new Set(subjectData.map(item => item.stream?.name).filter(Boolean))];
-        const semesters = [...new Set(subjectData.map(item => item.semester?.name).filter(Boolean))];
-        const degrees = [...new Set(subjectData.map(item => item.degree?.name).filter(Boolean))];
-        const universities = [...new Set(subjectData.map(item => item.university?.name).filter(Boolean))];
-        const subjectNames = [...new Set(subjectData.map(item => item.subMaster?.name).filter(Boolean))];
+        // Fetch courses
+        const coursesRes = await api.get('/course/admin', {
+          params: {
+            limit: 100,
+            offset: 0,
+            status: 'ACTIVE'
+          }
+        });
+        
+        const courseData = coursesRes.data?.result || [];
+        setCourses(courseData);
+        setFilteredCourses(courseData);
+        
+        // Extract unique values for filters from both subjects and courses
+        const allItems = [...subjectData, ...courseData];
+        const grades = [...new Set(allItems.map(item => item.grade?.name).filter(Boolean))];
+        const streams = [...new Set(allItems.map(item => item.stream?.name).filter(Boolean))];
+        const semesters = [...new Set(allItems.map(item => item.semester?.name).filter(Boolean))];
+        const degrees = [...new Set(allItems.map(item => item.degree?.name).filter(Boolean))];
+        const universities = [...new Set(allItems.map(item => item.university?.name).filter(Boolean))];
+        const names = [...new Set(allItems.map(item => 
+          item.subMaster?.name || item.name
+        ).filter(Boolean))];
         
         setFilterOptions({
           grades,
@@ -120,55 +152,98 @@ const StudyMaterialManagement = () => {
           semesters,
           degrees,
           universities,
-          subjectNames
+          names
         });
       } catch (err) {
-        console.error("Error fetching subjects:", err);
-        setMessage("Failed to load subjects.");
+        console.error("Error fetching data:", err);
+        setMessage("Failed to load data.");
       } finally {
         setLoading(false);
       }
     };
-    fetchSubjects();
+    fetchData();
   }, []);
 
-  // Apply filters to subjects
+  // Apply filters to subjects or courses based on active tab
   useEffect(() => {
-    let filtered = [...subjects];
-    
-    if (filters.grade) {
-      filtered = filtered.filter(item => item.grade?.name === filters.grade);
+    if (activeTab === "subjects") {
+      let filtered = [...subjects];
+      
+      if (filters.grade) {
+        filtered = filtered.filter(item => item.grade?.name === filters.grade);
+      }
+      
+      if (filters.stream) {
+        filtered = filtered.filter(item => item.stream?.name === filters.stream);
+      }
+      
+      if (filters.semester) {
+        filtered = filtered.filter(item => item.semester?.name === filters.semester);
+      }
+      
+      if (filters.degree) {
+        filtered = filtered.filter(item => item.degree?.name === filters.degree);
+      }
+      
+      if (filters.university) {
+        filtered = filtered.filter(item => item.university?.name === filters.university);
+      }
+      
+      if (filters.name) {
+        filtered = filtered.filter(item => item.subMaster?.name === filters.name);
+      }
+      
+      setFilteredSubjects(filtered);
+    } else {
+      let filtered = [...courses];
+      
+      if (filters.grade) {
+        filtered = filtered.filter(item => item.grade?.name === filters.grade);
+      }
+      
+      if (filters.stream) {
+        filtered = filtered.filter(item => item.stream?.name === filters.stream);
+      }
+      
+      if (filters.semester) {
+        filtered = filtered.filter(item => item.semester?.name === filters.semester);
+      }
+      
+      if (filters.degree) {
+        filtered = filtered.filter(item => item.degree?.name === filters.degree);
+      }
+      
+      if (filters.university) {
+        filtered = filtered.filter(item => item.university?.name === filters.university);
+      }
+      
+      if (filters.name) {
+        filtered = filtered.filter(item => item.name === filters.name);
+      }
+      
+      setFilteredCourses(filtered);
     }
-    
-    if (filters.stream) {
-      filtered = filtered.filter(item => item.stream?.name === filters.stream);
-    }
-    
-    if (filters.semester) {
-      filtered = filtered.filter(item => item.semester?.name === filters.semester);
-    }
-    
-    if (filters.degree) {
-      filtered = filtered.filter(item => item.degree?.name === filters.degree);
-    }
-    
-    if (filters.university) {
-      filtered = filtered.filter(item => item.university?.name === filters.university);
-    }
-    
-    if (filters.subjectName) {
-      filtered = filtered.filter(item => item.subMaster?.name === filters.subjectName);
-    }
-    
-    setFilteredSubjects(filtered);
-  }, [filters, subjects]);
+  }, [filters, subjects, courses, activeTab]);
 
-  // Fetch units for a subject
-  const fetchUnits = async (subjectId) => {
+  // Fetch units for a subject or course
+  const fetchUnits = async (id) => {
     try {
       setLoading(true);
-      const res = await api.get(`/unit/list?subjectId=${subjectId}&limit=100&offset=0`);
-      setUnits(res.data?.result || []);
+      let endpoint = '';
+      
+      if (activeTab === "subjects") {
+        endpoint = `/unit/list?subjectId=${id}&limit=100&offset=0`;
+      } else {
+        endpoint = `/unit/list?courseId=${id}&limit=100&offset=0`;
+      }
+      
+      const res = await api.get(endpoint);
+      
+      if (activeTab === "subjects") {
+        setSubjectUnits(res.data?.result || []);
+      } else {
+        setCourseUnits(res.data?.result || []);
+      }
     } catch (err) {
       console.error("Error fetching units:", err);
       setMessage("Failed to load units.");
@@ -199,7 +274,11 @@ const StudyMaterialManagement = () => {
         isSupported: material.filePath ? isSupportedFormat(material.filePath) : false
       }));
       
-      setStudyMaterials(materialsWithFixedUrls);
+      if (activeTab === "subjects") {
+        setSubjectStudyMaterials(materialsWithFixedUrls);
+      } else {
+        setCourseStudyMaterials(materialsWithFixedUrls);
+      }
     } catch (err) {
       console.error("Error fetching study materials:", err);
       setMessage("Failed to load study materials.");
@@ -211,20 +290,34 @@ const StudyMaterialManagement = () => {
   // Add new study material
   const handleAddStudyMaterial = async (e) => {
     e.preventDefault();
-    if (!selectedSubject || !selectedUnit || !title.trim()) {
+    
+    const selectedId = activeTab === "subjects" ? selectedSubject : selectedCourse;
+    const selectedUnit = activeTab === "subjects" ? selectedSubjectUnit : selectedCourseUnit;
+    
+    if (!selectedId || !selectedUnit || !title.trim()) {
       setMessage("Please fill all required fields.");
       return;
     }
 
     try {
-      await api.post("/study-material", {
-        subjectId: selectedSubject,
-        unitId: selectedUnit,
+      const payload = {
         title,
         description,
         price: accessTypes === "PAID" ? parseFloat(price) : 0,
-        accessTypes
-      });
+        accessTypes,
+        validityDays: validityDays || 0 // Added validityDays to payload
+      };
+      
+      // Add the appropriate ID based on active tab
+      if (activeTab === "subjects") {
+        payload.subjectId = selectedSubject;
+      } else {
+        payload.courseId = selectedCourse;
+      }
+      
+      payload.unitId = selectedUnit;
+      
+      await api.post("/study-material", payload);
       setMessage("✅ Study material added successfully!");
       resetForm();
       fetchStudyMaterials(selectedUnit, filters.accessTypes);
@@ -247,11 +340,14 @@ const StudyMaterialManagement = () => {
         title,
         description,
         price: accessTypes === "PAID" ? parseFloat(price) : 0,
-        accessTypes
+        accessTypes,
+        validityDays: validityDays || 0 // Added validityDays to update payload
       });
       setMessage("✅ Study material updated successfully!");
       setEditingMaterial(null);
       resetForm();
+      
+      const selectedUnit = activeTab === "subjects" ? selectedSubjectUnit : selectedCourseUnit;
       fetchStudyMaterials(selectedUnit, filters.accessTypes);
     } catch (err) {
       console.error("Error updating study material:", err);
@@ -266,6 +362,7 @@ const StudyMaterialManagement = () => {
     setDescription(material.description || "");
     setAccessTypes(material.accessTypes);
     setPrice(material.price || 0);
+    setValidityDays(material.validityDays || 0); // Set validityDays when editing
   };
 
   // Cancel edit
@@ -280,6 +377,8 @@ const StudyMaterialManagement = () => {
     setDescription("");
     setAccessTypes("FREE");
     setPrice(0);
+    setValidityDays(0); // Reset validityDays
+    setSelectedFile(null);
   };
 
   // Handle file upload with format validation
@@ -302,6 +401,8 @@ const StudyMaterialManagement = () => {
       });
       
       setMessage("✅ File uploaded successfully!");
+      
+      const selectedUnit = activeTab === "subjects" ? selectedSubjectUnit : selectedCourseUnit;
       fetchStudyMaterials(selectedUnit, filters.accessTypes);
     } catch (err) {
       console.error("Error uploading file:", err);
@@ -323,6 +424,8 @@ const StudyMaterialManagement = () => {
       });
       
       setMessage("✅ Thumbnail uploaded successfully!");
+      
+      const selectedUnit = activeTab === "subjects" ? selectedSubjectUnit : selectedCourseUnit;
       fetchStudyMaterials(selectedUnit, filters.accessTypes);
     } catch (err) {
       console.error("Error uploading thumbnail:", err);
@@ -346,19 +449,26 @@ const StudyMaterialManagement = () => {
       semester: "",
       degree: "",
       university: "",
-      subjectName: "",
+      name: "",
       accessTypes: ""
     });
   };
 
-  // Format subject display name with all relevant information
-  const formatSubjectName = (subject) => {
-    let name = subject.subMaster.name;
-    if (subject.grade?.name) name += ` - ${subject.grade.name}`;
-    if (subject.stream?.name) name += ` - ${subject.stream.name}`;
-    if (subject.semester?.name) name += ` - ${subject.semester.name}`;
-    if (subject.degree?.name) name += ` - ${subject.degree.name}`;
-    if (subject.university?.name) name += ` - ${subject.university.name}`;
+  // Format display name with all relevant information
+  const formatName = (item) => {
+    let name = "";
+    
+    if (activeTab === "subjects") {
+      name = item.subMaster?.name || "Unnamed Subject";
+    } else {
+      name = item.name || "Unnamed Course";
+    }
+    
+    if (item.grade?.name) name += ` - ${item.grade.name}`;
+    if (item.stream?.name) name += ` - ${item.stream.name}`;
+    if (item.semester?.name) name += ` - ${item.semester.name}`;
+    if (item.degree?.name) name += ` - ${item.degree.name}`;
+    if (item.university?.name) name += ` - ${item.university.name}`;
     return name;
   };
 
@@ -373,6 +483,31 @@ const StudyMaterialManagement = () => {
     if (isNaN(numericPrice)) return "0.00";
     
     return numericPrice.toFixed(2);
+  };
+
+  // Get current study materials based on active tab
+  const getCurrentStudyMaterials = () => {
+    return activeTab === "subjects" ? subjectStudyMaterials : courseStudyMaterials;
+  };
+
+  // Get current units based on active tab
+  const getCurrentUnits = () => {
+    return activeTab === "subjects" ? subjectUnits : courseUnits;
+  };
+
+  // Get current selected ID based on active tab
+  const getCurrentSelectedId = () => {
+    return activeTab === "subjects" ? selectedSubject : selectedCourse;
+  };
+
+  // Get current selected unit based on active tab
+  const getCurrentSelectedUnit = () => {
+    return activeTab === "subjects" ? selectedSubjectUnit : selectedCourseUnit;
+  };
+
+  // Get current filtered items based on active tab
+  const getCurrentFilteredItems = () => {
+    return activeTab === "subjects" ? filteredSubjects : filteredCourses;
   };
 
   // Get file extension from filename
@@ -392,7 +527,8 @@ const StudyMaterialManagement = () => {
       }
       
       // Get the material details first
-      const material = studyMaterials.find(m => m.id === materialId);
+      const materials = getCurrentStudyMaterials();
+      const material = materials.find(m => m.id === materialId);
       if (!material || !material.fileUrl) {
         throw new Error("File not available for download.");
       }
@@ -424,19 +560,37 @@ const StudyMaterialManagement = () => {
           <span>{supportedFormats.join(', ')}</span>
         </div>
 
+        {/* Tabs for Subjects and Courses */}
+        <div className="flex border-b mb-6">
+          <button
+            className={`py-2 px-4 font-medium ${activeTab === "subjects" ? "border-b-2 border-blue-500 text-blue-600" : "text-gray-500"}`}
+            onClick={() => setActiveTab("subjects")}
+          >
+            Subject Materials
+          </button>
+          <button
+            className={`py-2 px-4 font-medium ${activeTab === "courses" ? "border-b-2 border-blue-500 text-blue-600" : "text-gray-500"}`}
+            onClick={() => setActiveTab("courses")}
+          >
+            Course Materials
+          </button>
+        </div>
+
         {/* Filters Section */}
         <div className="mb-6 p-4 border rounded-lg bg-gray-50">
-          <h3 className="text-lg font-semibold mb-3">Filter Subjects</h3>
+          <h3 className="text-lg font-semibold mb-3">Filter {activeTab === "subjects" ? "Subjects" : "Courses"}</h3>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Subject Name</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                {activeTab === "subjects" ? "Subject Name" : "Course Name"}
+              </label>
               <select
                 className="w-full border border-gray-300 rounded-lg p-2"
-                value={filters.subjectName}
-                onChange={(e) => handleFilterChange('subjectName', e.target.value)}
+                value={filters.name}
+                onChange={(e) => handleFilterChange('name', e.target.value)}
               >
-                <option value="">All Subjects</option>
-                {filterOptions.subjectNames.map((name, index) => (
+                <option value="">All {activeTab === "subjects" ? "Subjects" : "Courses"}</option>
+                {filterOptions.names.map((name, index) => (
                   <option key={index} value={name}>{name}</option>
                 ))}
               </select>
@@ -536,35 +690,46 @@ const StudyMaterialManagement = () => {
           </div>
         </div>
 
-        {/* Subject and Unit Selection */}
+        {/* Subject/Course and Unit Selection */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Select Subject
+              Select {activeTab === "subjects" ? "Subject" : "Course"}
             </label>
             <select
               className="w-full border border-gray-300 rounded-lg p-2"
-              value={selectedSubject}
+              value={getCurrentSelectedId()}
               onChange={(e) => {
-                setSelectedSubject(e.target.value);
-                setSelectedUnit("");
-                setStudyMaterials([]);
+                if (activeTab === "subjects") {
+                  setSelectedSubject(e.target.value);
+                  setSelectedSubjectUnit("");
+                  setSubjectStudyMaterials([]);
+                } else {
+                  setSelectedCourse(e.target.value);
+                  setSelectedCourseUnit("");
+                  setCourseStudyMaterials([]);
+                }
+                
                 if (e.target.value) {
                   fetchUnits(e.target.value);
                 } else {
-                  setUnits([]);
+                  if (activeTab === "subjects") {
+                    setSubjectUnits([]);
+                  } else {
+                    setCourseUnits([]);
+                  }
                 }
               }}
             >
-              <option value="">-- Select Subject --</option>
-              {filteredSubjects.map((subject) => (
-                <option key={subject.id} value={subject.id}>
-                  {formatSubjectName(subject)}
+              <option value="">-- Select {activeTab === "subjects" ? "Subject" : "Course"} --</option>
+              {getCurrentFilteredItems().map((item) => (
+                <option key={item.id} value={item.id}>
+                  {formatName(item)}
                 </option>
               ))}
             </select>
             <p className="text-sm text-gray-500 mt-1">
-              {filteredSubjects.length} subject(s) found
+              {getCurrentFilteredItems().length} {activeTab === "subjects" ? "subject(s)" : "course(s)"} found
             </p>
           </div>
 
@@ -574,19 +739,28 @@ const StudyMaterialManagement = () => {
             </label>
             <select
               className="w-full border border-gray-300 rounded-lg p-2"
-              value={selectedUnit}
+              value={getCurrentSelectedUnit()}
               onChange={(e) => {
-                setSelectedUnit(e.target.value);
+                if (activeTab === "subjects") {
+                  setSelectedSubjectUnit(e.target.value);
+                } else {
+                  setSelectedCourseUnit(e.target.value);
+                }
+                
                 if (e.target.value) {
                   fetchStudyMaterials(e.target.value, filters.accessTypes);
                 } else {
-                  setStudyMaterials([]);
+                  if (activeTab === "subjects") {
+                    setSubjectStudyMaterials([]);
+                  } else {
+                    setCourseStudyMaterials([]);
+                  }
                 }
               }}
-              disabled={!selectedSubject}
+              disabled={!getCurrentSelectedId()}
             >
               <option value="">-- Select Unit --</option>
-              {units.map((unit) => (
+              {getCurrentUnits().map((unit) => (
                 <option key={unit.id} value={unit.id}>
                   {unit.name}
                 </option>
@@ -596,10 +770,10 @@ const StudyMaterialManagement = () => {
         </div>
 
         {/* Add/Edit Study Material Form */}
-        {selectedUnit && (
+        {getCurrentSelectedUnit() && (
           <form onSubmit={editingMaterial ? handleUpdateStudyMaterial : handleAddStudyMaterial} className="mb-6 bg-gray-50 p-4 rounded-lg">
             <h3 className="text-lg font-semibold mb-4">
-              {editingMaterial ? 'Edit Study Material' : 'Add New Study Material'}
+              {editingMaterial ? 'Edit Study Material' : `Add New Study Material to ${activeTab === "subjects" ? "Subject" : "Course"}`}
             </h3>
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
@@ -652,6 +826,18 @@ const StudyMaterialManagement = () => {
                   />
                 </div>
               )}
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Validity (Days)</label>
+                <input
+                  type="number"
+                  className="w-full border border-gray-300 rounded-lg p-2"
+                  value={validityDays}
+                  onChange={(e) => setValidityDays(e.target.value)}
+                  min="0"
+                  placeholder="0 for unlimited"
+                />
+              </div>
             </div>
             
             <div className="flex items-center gap-2">
@@ -688,16 +874,16 @@ const StudyMaterialManagement = () => {
         )}
 
         {/* Study Materials List */}
-        {selectedUnit && (
+        {getCurrentSelectedUnit() && (
           <>
             <h3 className="text-lg font-semibold mb-4">Study Materials</h3>
             {loading ? (
               <div className="flex justify-center items-center py-8">
                 <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
               </div>
-            ) : studyMaterials.length > 0 ? (
+            ) : getCurrentStudyMaterials().length > 0 ? (
               <div className="grid gap-4">
-                {studyMaterials.map((material) => (
+                {getCurrentStudyMaterials().map((material) => (
                   <div key={material.id} className="border p-4 rounded-lg bg-white shadow-sm">
                     <div className="flex justify-between items-start mb-3">
                       <div className="flex-1">
@@ -709,6 +895,11 @@ const StudyMaterialManagement = () => {
                           }`}>
                             {material.accessTypes === 'FREE' ? 'FREE' : `$${formatPrice(material.price)}`}
                           </span>
+                          {material.validityDays > 0 && (
+                            <span className="px-2 py-1 rounded-full text-xs bg-blue-100 text-blue-800">
+                              {material.validityDays} days validity
+                            </span>
+                          )}
                           {material.fileName && (
                             <span className={`px-2 py-1 rounded-full text-xs ${
                               material.isSupported ? 'bg-gray-100 text-gray-800' : 'bg-red-100 text-red-800'
@@ -787,7 +978,7 @@ const StudyMaterialManagement = () => {
                             />
                             Choose Thumbnail
                           </label>
-                          {material.thumbnailPath && (
+                          {material.thumbnailUrl && (
                             <div className="ml-2">
                               <img 
                                 src={material.thumbnailUrl} 

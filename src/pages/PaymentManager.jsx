@@ -1,504 +1,534 @@
-import React, { useState, useEffect } from 'react';
-import { useAuditLog } from '../context/AuditLogContext';
-import { Search, Download, Plus, X, Check, Clock, AlertCircle } from 'lucide-react';
-import { usersData } from './mockUsers';
+import React, { useEffect, useState } from 'react';
+import { API_BASE_URL } from '../config/api';
 
-const PaymentsManager = () => {
-  const { addLog } = useAuditLog();
-  const [transactions, setTransactions] = useState([]);
-  const [subscriptionPlans, setSubscriptionPlans] = useState([]);
-  const [filters, setFilters] = useState({
-    student: '',
-    dateFrom: '',
-    dateTo: '',
-    plan: '',
-    class: '',
-    status: ''
-  });
-  const [newPlan, setNewPlan] = useState({
-    name: '',
-    duration: 30,
-    price: 0,
-    features: '',
-    description: ''
-  });
-  const [showPlanForm, setShowPlanForm] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
+const AdminPaymentPanel = () => {
+  const [purchases, setPurchases] = useState([]);
+  const [filteredPurchases, setFilteredPurchases] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(10);
+  const [total, setTotal] = useState(null);
+  const [statusFilter, setStatusFilter] = useState('');
+  const [selected, setSelected] = useState(null);
+  const [isRefunding, setIsRefunding] = useState(false);
+  const [refundAmount, setRefundAmount] = useState('');
+  const [showRefundModal, setShowRefundModal] = useState(false);
+  const [verifying, setVerifying] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [searchField, setSearchField] = useState('email'); // Default search field
 
-  // Initialize data from usersData
   useEffect(() => {
-    // Safely extract transactions from users' payment history
-    const allTransactions = usersData.flatMap(user => 
-      (user.paymentHistory || []).map(payment => ({
-        ...payment,
-        student: user.name || '',
-        email: user.email || '',
-        class: Array.isArray(user.class) ? user.class[0] : '',
-        plan: user.plan?.name || '',
-        status: payment.status ? payment.status.toLowerCase() : '',
-        studentId: user.id || ''
-      }))
-    ).filter(txn => txn.invoiceId);
-
-    // Safely create subscription plans
-    const uniquePlans = [...new Set(
-      usersData
-        .filter(user => user.plan?.name)
-        .map(user => user.plan.name)
-    )];
-    
-    const mockPlans = uniquePlans.map((planName, index) => {
-      const sampleUser = usersData.find(user => user.plan?.name === planName);
-      const startDate = sampleUser?.plan?.startDate ? new Date(sampleUser.plan.startDate) : null;
-      const endDate = sampleUser?.plan?.endDate ? new Date(sampleUser.plan.endDate) : null;
-      const duration = startDate && endDate ? 
-        Math.round((endDate - startDate) / (1000 * 60 * 60 * 24)) : 30;
-
-      return {
-        id: `plan_${index + 1}`,
-        name: planName,
-        duration,
-        price: planName === 'Premium' ? 120 : planName === 'Basic' ? 80 : 0,
-        features: sampleUser?.plan?.features?.join(', ') || '',
-        active: true,
-        subscribers: usersData.filter(user => user.plan?.name === planName).length
-      };
-    });
-
-    setTransactions(allTransactions);
-    setSubscriptionPlans(mockPlans);
-    // addLog('PAYMENTS_PAGE_LOADED', 'PAYMENTS', {
-    //   transactionCount: allTransactions.length,
-    //   planCount: mockPlans.length
-    // });
+    fetchPurchases();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Empty dependency array to run only once on mount
+  }, [page, limit, statusFilter]);
 
-  const handleFilterChange = (e) => {
-    const { name, value } = e.target;
-    setFilters(prev => ({ ...prev, [name]: value }));
-    addLog('PAYMENTS_FILTER_CHANGED', 'PAYMENTS', { filter: name, value });
+  useEffect(() => {
+    filterPurchases();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchTerm, searchField, purchases]);
+
+  const fetchPurchases = async () => {
+    setLoading(true);
+    setError(null);
+    
+    try {
+      // Build query parameters
+      const params = new URLSearchParams({
+        page: page,
+        limit: limit,
+        offset:0,
+        ...(statusFilter && { status: statusFilter })
+      });
+      
+      // Call the API endpoint using API_BASE_URL
+      const response = await fetch(`${API_BASE_URL}/purchase/admin/history?${params}`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Failed to fetch purchases: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      // Updated to match your API response structure
+      setPurchases(data.result || []);
+      setTotal(data.total || data.result?.length || 0);
+    } catch (err) {
+      setError(err.message || 'Failed to load purchases');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handlePlanSubmit = (e) => {
-    e.preventDefault();
-    if (!newPlan.name || newPlan.price <= 0) {
-      addLog('PLAN_CREATION_FAILED', 'SUBSCRIPTIONS', { reason: 'Invalid plan data' });
+  const filterPurchases = () => {
+    if (!searchTerm) {
+      setFilteredPurchases(purchases);
       return;
     }
 
-    const plan = {
-      ...newPlan,
-      id: `plan_${Date.now()}`,
-      active: true,
-      createdAt: new Date().toISOString(),
-      subscribers: 0
-    };
-
-    setSubscriptionPlans(prev => [...prev, plan]);
-    addLog('PLAN_CREATED', 'SUBSCRIPTIONS', {
-      plan: plan.name,
-      duration: plan.duration,
-      price: plan.price,
-      features: plan.features
+    const filtered = purchases.filter(purchase => {
+      const searchValue = searchTerm.toLowerCase();
+      
+      switch(searchField) {
+        case 'email':
+          return purchase.account?.email?.toLowerCase().includes(searchValue) || 
+                 purchase.accountId?.toLowerCase().includes(searchValue);
+        case 'orderId':
+          return purchase.id?.toLowerCase().includes(searchValue);
+        case 'transactionId':
+          return purchase.transactionId?.toLowerCase().includes(searchValue);
+        case 'itemName':
+          const itemName = getPurchaseItemName(purchase).toLowerCase();
+          return itemName.includes(searchValue);
+        case 'purchaseType':
+          return purchase.purchaseType?.toLowerCase().includes(searchValue);
+        default:
+          return true;
+      }
     });
 
-    setNewPlan({
-      name: '',
-      duration: 30,
-      price: 0,
-      features: '',
-      description: ''
-    });
-    setShowPlanForm(false);
+    setFilteredPurchases(filtered);
   };
 
-  const togglePlanStatus = (planId) => {
-    setSubscriptionPlans(prev =>
-      prev.map(plan =>
-        plan.id === planId ? { ...plan, active: !plan.active } : plan
-      )
-    );
-    const plan = subscriptionPlans.find(p => p.id === planId);
-    addLog('PLAN_STATUS_CHANGED', 'SUBSCRIPTIONS', {
-      plan: plan.name,
-      newStatus: !plan.active ? 'active' : 'inactive'
-    });
+  const openRefundModal = (purchase) => {
+    setSelected(purchase);
+    setRefundAmount(purchase.amount || '');
+    setShowRefundModal(true);
   };
 
-  const exportTransactions = () => {
-    addLog('TRANSACTIONS_EXPORTED', 'PAYMENTS', {
-      filter: filters,
-      count: filteredTransactions.length
-    });
+  const closeRefundModal = () => {
+    setShowRefundModal(false);
+    setSelected(null);
+    setRefundAmount('');
+  };
+
+  const submitRefund = async () => {
+    if (!selected) return;
+    const merchantOrderId = selected.id; // Using id as merchantOrderId
+    const amount = parseFloat(refundAmount);
     
-    const headers = ['Student', 'Email', 'Date', 'Amount', 'Plan', 'Class', 'Status', 'Invoice ID'];
-    const csvContent = [
-      headers.join(','),
-      ...filteredTransactions.map(txn => 
-        [
-          `"${txn.student}"`,
-          `"${txn.email}"`,
-          `"${new Date(txn.date).toLocaleString()}"`,
-          `"₹${txn.amount}"`,
-          `"${txn.plan}"`,
-          `"${txn.class}"`,
-          `"${txn.status}"`,
-          `"${txn.invoiceId}"`
-        ].join(',')
-      )
-    ].join('\n');
+    if (isNaN(amount) || amount <= 0) {
+      alert('Enter a valid refund amount');
+      return;
+    }
 
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.setAttribute('download', `transactions_${new Date().toISOString().split('T')[0]}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
+    setIsRefunding(true);
+    setError(null);
 
-  const getStatusIcon = (status) => {
-    switch (status) {
-      case 'paid': return <Check className="text-green-500" size={16} />;
-      case 'pending': return <Clock className="text-yellow-500" size={16} />;
-      case 'failed': return <AlertCircle className="text-red-500" size={16} />;
-      default: return null;
+    try {
+      const response = await fetch(`${API_BASE_URL}/payment/admin/refund`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ merchantOrderId, refundAmount: amount }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Refund failed: ${response.status}`);
+      }
+
+      const data = await response.json();
+      alert(`Refund processed. RefundId: ${data.refundId || data.merchantRefundId || 'N/A'}`);
+      closeRefundModal();
+      fetchPurchases(); // Refresh the list
+    } catch (err) {
+      setError(err.message || 'Refund failed');
+    } finally {
+      setIsRefunding(false);
     }
   };
 
-  const filteredTransactions = transactions.filter(txn => {
-    const matchesSearch = searchQuery === '' || 
-      txn.student.toLowerCase().includes(searchQuery.toLowerCase()) || 
-      txn.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      txn.invoiceId.toLowerCase().includes(searchQuery.toLowerCase());
+  const verifyPayment = async (merchantOrderId) => {
+    setVerifying(true);
+    setError(null);
+    
+    try {
+      const response = await fetch(`${API_BASE_URL}/payment/verify/${merchantOrderId}`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+        }
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Verification failed: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      alert(`Verification result: ${data.status} — amount: ${data.amount}`);
+      fetchPurchases(); // Refresh the list
+    } catch (err) {
+      setError(err.message || 'Verification failed');
+    } finally {
+      setVerifying(false);
+    }
+  };
 
-    return (
-      matchesSearch &&
-      (filters.student === '' || txn.student.toLowerCase().includes(filters.student.toLowerCase())) &&
-      (filters.dateFrom === '' || new Date(txn.date) >= new Date(filters.dateFrom)) &&
-      (filters.dateTo === '' || new Date(txn.date) <= new Date(filters.dateTo)) &&
-      (filters.plan === '' || txn.plan.toLowerCase() === filters.plan.toLowerCase()) &&
-      (filters.class === '' || txn.class.toLowerCase() === filters.class.toLowerCase()) &&
-      (filters.status === '' || txn.status === filters.status.toLowerCase())
-    );
-  });
+  const exportCSV = () => {
+    const dataToExport = searchTerm ? filteredPurchases : purchases;
+    if (!dataToExport.length) return;
+    
+    const headers = ['Order ID', 'User', 'Purchase Type', 'Item', 'Amount', 'Status', 'TransactionID', 'Created At'];
+    const rows = dataToExport.map(p => [
+      p.id,
+      p.account?.email || p.accountId || 'N/A',
+      p.purchaseType,
+      getPurchaseItemName(p),
+      p.amount,
+      p.paymentStatus,
+      p.transactionId || 'N/A',
+      new Date(p.createdAt).toLocaleString()
+    ]);
+    
+    let csvContent = headers.join(',') + '\n';
+    rows.forEach(row => {
+      csvContent += row.map(field => `"${field}"`).join(',') + '\n';
+    });
+    
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `purchases_export_${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
 
-  const getPlanRevenue = (planName) => {
-    return transactions
-      .filter(txn => txn.plan === planName && txn.status === 'paid')
-      .reduce((sum, txn) => sum + parseInt(txn.amount), 0);
+  const getPurchaseItemName = (purchase) => {
+    if (purchase.audioLecture) return purchase.audioLecture.title;
+    if (purchase.course) return purchase.course.title;
+    if (purchase.studyMaterial) return purchase.studyMaterial.title;
+    if (purchase.mcqTest) return purchase.mcqTest.title;
+    return 'N/A';
+  };
+
+  const clearSearch = () => {
+    setSearchTerm('');
+    setSearchField('email');
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="p-6 max-w-7xl mx-auto">
-        <h1 className="text-3xl font-bold mb-8">Payments & Subscriptions</h1>
+    <div className="p-6 bg-gray-50 min-h-screen">
+      <div className="max-w-7xl mx-auto">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
+          <h1 className="text-2xl font-bold text-gray-800">Payment Management</h1>
+          
+          <div className="flex flex-wrap gap-2">
+            <select
+              className="border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+            >
+              <option value="">All Statuses</option>
+              <option value="COMPLETED">Completed</option>
+              <option value="PENDING">Pending</option>
+              <option value="FAILED">Failed</option>
+              <option value="REFUNDED">Refunded</option>
+            </select>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Transactions Section */}
-          <div className="lg:col-span-2 space-y-6">
-            <div className="bg-white rounded-xl shadow">
-              <div className="p-6">
-                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
-                  <h2 className="text-xl font-semibold">Payment Transactions</h2>
-                  <div className="flex items-center gap-4 w-full md:w-auto">
-                    <div className="relative flex-grow md:flex-grow-0 md:w-64">
-                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
-                      <input
-                        type="text"
-                        placeholder="Search transactions..."
-                        className="pl-10 pr-4 py-2 border rounded-lg w-full"
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                      />
-                    </div>
-                    <button
-                      onClick={exportTransactions}
-                      className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 whitespace-nowrap"
-                    >
-                      <Download size={18} /> Export CSV
-                    </button>
-                  </div>
-                </div>
+            <button
+              className="bg-white border border-gray-300 rounded-md px-4 py-2 hover:bg-gray-50 transition-colors"
+              onClick={fetchPurchases}
+            >
+              Refresh
+            </button>
 
-                {/* Filters */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
-                  <div>
-                    <label className="block text-sm font-medium mb-1">Date Range</label>
-                    <div className="flex gap-1">
-                      <input
-                        type="date"
-                        name="dateFrom"
-                        value={filters.dateFrom}
-                        onChange={handleFilterChange}
-                        className="w-1/2 p-2 border rounded"
-                      />
-                      <input
-                        type="date"
-                        name="dateTo"
-                        value={filters.dateTo}
-                        onChange={handleFilterChange}
-                        className="w-1/2 p-2 border rounded"
-                      />
-                    </div>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium mb-1">Plan</label>
-                    <select
-                      name="plan"
-                      value={filters.plan}
-                      onChange={handleFilterChange}
-                      className="w-full p-2 border rounded"
-                    >
-                      <option value="">All Plans</option>
-                      {subscriptionPlans.map(plan => (
-                        <option key={plan.id} value={plan.name}>{plan.name}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium mb-1">Status</label>
-                    <select
-                      name="status"
-                      value={filters.status}
-                      onChange={handleFilterChange}
-                      className="w-full p-2 border rounded"
-                    >
-                      <option value="">All Statuses</option>
-                      <option value="paid">Paid</option>
-                      <option value="pending">Pending</option>
-                      <option value="failed">Failed</option>
-                    </select>
-                  </div>
-                </div>
-
-                {/* Summary Cards */}
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-                  <div className="bg-blue-50 p-4 rounded-lg">
-                    <h3 className="text-sm font-medium text-blue-800">Total Transactions</h3>
-                    <p className="text-2xl font-bold">{filteredTransactions.length}</p>
-                  </div>
-                  <div className="bg-green-50 p-4 rounded-lg">
-                    <h3 className="text-sm font-medium text-green-800">Total Revenue</h3>
-                    <p className="text-2xl font-bold">
-                      ₹{filteredTransactions
-                        .filter(txn => txn.status === 'paid')
-                        .reduce((sum, txn) => sum + parseInt(txn.amount), 0)}
-                    </p>
-                  </div>
-                  <div className="bg-purple-50 p-4 rounded-lg">
-                    <h3 className="text-sm font-medium text-purple-800">Active Subscribers</h3>
-                    <p className="text-2xl font-bold">
-                      {usersData.filter(user => user.status === 'active').length}
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Scrollable Transactions Table */}
-              <div className="overflow-x-auto max-h-[calc(100vh-300px)]">
-                <table className="w-full border-collapse">
-                  <thead className="sticky top-0 bg-gray-50 z-10">
-                    <tr className="text-left">
-                      <th className="p-3 font-medium border-b">Invoice</th>
-                      <th className="p-3 font-medium border-b">Student</th>
-                      <th className="p-3 font-medium border-b">Date</th>
-                      <th className="p-3 font-medium border-b">Amount</th>
-                      <th className="p-3 font-medium border-b">Plan</th>
-                      <th className="p-3 font-medium border-b">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredTransactions.length > 0 ? (
-                      filteredTransactions.map(txn => (
-                        <tr key={txn.invoiceId} className="border-b hover:bg-gray-50">
-                          <td className="p-3 font-mono text-sm">#{txn.invoiceId}</td>
-                          <td className="p-3">
-                            <div className="font-medium">{txn.student}</div>
-                            <div className="text-sm text-gray-500">{txn.class}</div>
-                          </td>
-                          <td className="p-3 whitespace-nowrap">
-                            {new Date(txn.date).toLocaleDateString()}
-                          </td>
-                          <td className="p-3 font-medium">₹{txn.amount}</td>
-                          <td className="p-3">{txn.plan}</td>
-                          <td className="p-3">
-                            <div className="flex items-center gap-2">
-                              {getStatusIcon(txn.status)}
-                              <span className={`capitalize ${
-                                txn.status === 'paid' ? 'text-green-600' :
-                                txn.status === 'pending' ? 'text-yellow-600' :
-                                'text-red-600'
-                              }`}>
-                                {txn.status}
-                              </span>
-                            </div>
-                          </td>
-                        </tr>
-                      ))
-                    ) : (
-                      <tr>
-                        <td colSpan="6" className="p-4 text-center text-gray-500">
-                          No transactions found matching your filters
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-
-          {/* Subscription Plans Section */}
-          <div className="space-y-6">
-            <div className="bg-white rounded-xl shadow p-6 sticky top-6">
-              <div className="flex justify-between items-center mb-6">
-                <h2 className="text-xl font-semibold">Subscription Plans</h2>
-                <button
-                  onClick={() => setShowPlanForm(!showPlanForm)}
-                  className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-                >
-                  {showPlanForm ? <X size={18} /> : <Plus size={18} />}
-                  {showPlanForm ? 'Cancel' : 'New Plan'}
-                </button>
-              </div>
-              
-              {showPlanForm && (
-                <form onSubmit={handlePlanSubmit} className="space-y-4 mb-6 border-t pt-6">
-                  <div>
-                    <label className="block text-sm font-medium mb-1">Plan Name*</label>
-                    <input
-                      type="text"
-                      value={newPlan.name}
-                      onChange={(e) => setNewPlan({...newPlan, name: e.target.value})}
-                      className="w-full p-2 border rounded"
-                      placeholder="e.g., Premium Annual"
-                      required
-                    />
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium mb-1">Duration (days)*</label>
-                      <input
-                        type="number"
-                        value={newPlan.duration}
-                        onChange={(e) => setNewPlan({...newPlan, duration: parseInt(e.target.value) || 0})}
-                        className="w-full p-2 border rounded"
-                        min="1"
-                        required
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium mb-1">Price (₹)*</label>
-                      <input
-                        type="number"
-                        value={newPlan.price}
-                        onChange={(e) => setNewPlan({...newPlan, price: parseFloat(e.target.value) || 0})}
-                        className="w-full p-2 border rounded"
-                        min="0"
-                        step="0.01"
-                        required
-                      />
-                    </div>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium mb-1">Features*</label>
-                    <textarea
-                      value={newPlan.features}
-                      onChange={(e) => setNewPlan({...newPlan, features: e.target.value})}
-                      className="w-full p-2 border rounded"
-                      rows={3}
-                      placeholder="One feature per line"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium mb-1">Description</label>
-                    <textarea
-                      value={newPlan.description}
-                      onChange={(e) => setNewPlan({...newPlan, description: e.target.value})}
-                      className="w-full p-2 border rounded"
-                      rows={2}
-                      placeholder="Plan description for students"
-                    />
-                  </div>
-                  <button
-                    type="submit"
-                    className="w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700"
-                  >
-                    Create Plan
-                  </button>
-                </form>
-              )}
-
-              <div className="space-y-4 max-h-[400px] overflow-y-auto">
-                {subscriptionPlans.map(plan => (
-                  <div key={plan.id} className="border rounded-lg p-4 hover:shadow-md transition-shadow">
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <h3 className="font-semibold">{plan.name}</h3>
-                        <p className="text-sm text-gray-600 mt-1">
-                          ₹{plan.price} for {plan.duration} days
-                        </p>
-                        <p className="text-xs text-gray-500 mt-1">
-                          {plan.subscribers} subscribers • ₹{getPlanRevenue(plan.name)} revenue
-                        </p>
-                      </div>
-                      <label className="inline-flex items-center cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={plan.active}
-                          onChange={() => togglePlanStatus(plan.id)}
-                          className="sr-only peer"
-                        />
-                        <div className="relative w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-                      </label>
-                    </div>
-                    {plan.features && (
-                      <ul className="mt-2 text-sm list-disc pl-5 space-y-1">
-                        {plan.features.split('\n').map((feature, i) => (
-                          <li key={i}>{feature}</li>
-                        ))}
-                      </ul>
-                    )}
-                    <div className="mt-3 flex justify-between items-center text-xs">
-                      <button className="text-blue-600 hover:underline">View subscribers</button>
-                      <span className={`px-2 py-1 rounded-full ${
-                        plan.active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
-                      }`}>
-                        {plan.active ? 'Active' : 'Inactive'}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Revenue Summary */}
-            <div className="bg-white rounded-xl shadow p-6 sticky top-[calc(6rem+400px)]">
-              <h2 className="text-xl font-semibold mb-4">Revenue Summary</h2>
-              <div className="space-y-4">
-                {subscriptionPlans.map(plan => (
-                  <div key={plan.id} className="flex justify-between items-center">
-                    <span>{plan.name}</span>
-                    <span className="font-medium">₹{getPlanRevenue(plan.name)}</span>
-                  </div>
-                ))}
-                <div className="border-t pt-3 mt-3 font-bold flex justify-between">
-                  <span>Total Revenue</span>
-                  <span>
-                    ₹{subscriptionPlans.reduce((sum, plan) => sum + getPlanRevenue(plan.name), 0)}
-                  </span>
-                </div>
-              </div>
-            </div>
+            <button
+              className="bg-white border border-gray-300 rounded-md px-4 py-2 hover:bg-gray-50 transition-colors"
+              onClick={exportCSV}
+            >
+              Export CSV
+            </button>
           </div>
         </div>
+
+        {/* Search Section */}
+        <div className="bg-white p-4 rounded-lg shadow mb-6">
+          <div className="flex flex-col md:flex-row gap-4 items-start md:items-center">
+            <div className="flex flex-col md:flex-row gap-2 w-full">
+              <div className="flex-1">
+                <label htmlFor="searchField" className="block text-sm font-medium text-gray-700 mb-1">
+                  Search By
+                </label>
+                <select
+                  id="searchField"
+                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  value={searchField}
+                  onChange={(e) => setSearchField(e.target.value)}
+                >
+                  <option value="email">User Email</option>
+                  <option value="orderId">Order ID</option>
+                  <option value="transactionId">Transaction ID</option>
+                  <option value="itemName">Item Name</option>
+                  <option value="purchaseType">Purchase Type</option>
+                </select>
+              </div>
+              
+              <div className="flex-1">
+                <label htmlFor="searchTerm" className="block text-sm font-medium text-gray-700 mb-1">
+                  Search Term
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    id="searchTerm"
+                    placeholder={`Search by ${searchField}...`}
+                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                  />
+                  {searchTerm && (
+                    <button
+                      onClick={clearSearch}
+                      className="bg-gray-200 text-gray-700 rounded-md px-3 py-2 hover:bg-gray-300 transition-colors"
+                      title="Clear search"
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          {searchTerm && (
+            <div className="mt-3 text-sm text-gray-600">
+              Showing {filteredPurchases.length} of {purchases.length} purchases matching "{searchTerm}" in {searchField}
+            </div>
+          )}
+        </div>
+
+        {/* Error Message */}
+        {error && (
+          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
+            {error}
+          </div>
+        )}
+
+        {/* Purchases Table */}
+        <div className="bg-white rounded-lg shadow overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-100">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Order ID
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    User
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Type
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Item
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Amount
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Status
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Transaction ID
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Created At
+                  </th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Actions
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {loading ? (
+                  <tr>
+                    <td colSpan={9} className="px-6 py-4 text-center">
+                      <div className="flex justify-center items-center">
+                        <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-500"></div>
+                      </div>
+                    </td>
+                  </tr>
+                ) : (searchTerm ? filteredPurchases : purchases).length > 0 ? (
+                  (searchTerm ? filteredPurchases : purchases).map((purchase) => (
+                    <tr key={purchase.id} className="hover:bg-gray-50">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {purchase.id}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {purchase.account?.email || purchase.accountId || 'N/A'}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {purchase.purchaseType}
+                      </td>
+                      <td className="px-6 py-4 text-sm text-gray-500">
+                        {getPurchaseItemName(purchase)}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        ${purchase.amount || '0.00'}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full
+                          ${purchase.paymentStatus === 'COMPLETED' ? 'bg-green-100 text-green-800' : 
+                            purchase.paymentStatus === 'PENDING' ? 'bg-yellow-100 text-yellow-800' : 
+                            purchase.paymentStatus === 'FAILED' ? 'bg-red-100 text-red-800' : 
+                            purchase.paymentStatus === 'REFUNDED' ? 'bg-blue-100 text-blue-800' : 
+                            'bg-gray-100 text-gray-800'}`}>
+                          {purchase.paymentStatus}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {purchase.transactionId || 'N/A'}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {new Date(purchase.createdAt).toLocaleString()}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                        <div className="flex justify-end space-x-2">
+                          <button
+                            className="text-blue-600 hover:text-blue-900 disabled:text-gray-400"
+                            onClick={() => verifyPayment(purchase.id)}
+                            disabled={verifying}
+                          >
+                            Verify
+                          </button>
+                          <button
+                            className="text-red-600 hover:text-red-900"
+                            onClick={() => openRefundModal(purchase)}
+                          >
+                            Refund
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={9} className="px-6 py-4 text-center text-sm text-gray-500">
+                      {searchTerm ? 'No purchases found matching your search' : 'No purchases found'}
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* Pagination */}
+        <div className="flex flex-col sm:flex-row justify-between items-center mt-4 gap-4">
+          <div className="flex items-center">
+            <span className="text-sm text-gray-700 mr-2">Rows per page:</span>
+            <select
+              value={limit}
+              onChange={(e) => {
+                setLimit(Number(e.target.value));
+                setPage(1);
+              }}
+              className="border border-gray-300 rounded-md px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value={5}>5</option>
+              <option value={10}>10</option>
+              <option value={20}>20</option>
+              <option value={50}>50</option>
+            </select>
+          </div>
+
+          <div className="flex items-center space-x-2">
+            <button
+              className="px-3 py-1 border border-gray-300 rounded-md disabled:opacity-50 hover:bg-gray-50"
+              onClick={() => setPage(page - 1)}
+              disabled={page === 1}
+            >
+              Previous
+            </button>
+            <span className="text-sm text-gray-700">
+              Page {page} {total ? `of ${Math.ceil(total / limit)}` : ''}
+            </span>
+            <button
+              className="px-3 py-1 border border-gray-300 rounded-md disabled:opacity-50 hover:bg-gray-50"
+              onClick={() => setPage(page + 1)}
+              disabled={(searchTerm ? filteredPurchases : purchases).length < limit}
+            >
+              Next
+            </button>
+          </div>
+        </div>
+
+        {/* Refund Modal */}
+        {showRefundModal && selected && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+            <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
+              <div className="p-6">
+                <h3 className="text-lg font-medium text-gray-900 mb-4">Process Refund</h3>
+                
+                <div className="mb-4">
+                  <p className="text-sm text-gray-600 mb-1">Order ID:</p>
+                  <p className="font-medium">{selected.id}</p>
+                </div>
+                
+                <div className="mb-4">
+                  <p className="text-sm text-gray-600 mb-1">User:</p>
+                  <p className="font-medium">{selected.account?.email || selected.accountId || 'N/A'}</p>
+                </div>
+                
+                <div className="mb-4">
+                  <p className="text-sm text-gray-600 mb-1">Item:</p>
+                  <p className="font-medium">{getPurchaseItemName(selected)}</p>
+                </div>
+                
+                <div className="mb-4">
+                  <p className="text-sm text-gray-600 mb-1">Original Amount:</p>
+                  <p className="font-medium">${selected.amount || '0.00'}</p>
+                </div>
+                
+                <div className="mb-4">
+                  <label htmlFor="refundAmount" className="block text-sm font-medium text-gray-700 mb-1">
+                    Refund Amount
+                  </label>
+                  <input
+                    type="number"
+                    id="refundAmount"
+                    step="0.01"
+                    min="0.01"
+                    max={selected.amount}
+                    value={refundAmount}
+                    onChange={(e) => setRefundAmount(e.target.value)}
+                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                
+                <div className="flex justify-end space-x-3">
+                  <button
+                    className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                    onClick={closeRefundModal}
+                    disabled={isRefunding}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 disabled:opacity-50"
+                    onClick={submitRefund}
+                    disabled={isRefunding}
+                  >
+                    {isRefunding ? 'Processing...' : 'Confirm Refund'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
 };
 
-export default PaymentsManager;
+export default AdminPaymentPanel;

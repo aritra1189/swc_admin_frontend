@@ -45,6 +45,26 @@ export const fetchQuestions = createAsyncThunk(
     }
   }
 );
+// src/store/slices/questionSlice.js (add this to your existing slice)
+
+export const uploadOptionImage = createAsyncThunk(
+  'questions/uploadOptionImage',
+  async ({ optionId, file }, { rejectWithValue }) => {
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      
+      const response = await api.put(`/option/img/${optionId}`, formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+      return response.data;
+    } catch (error) {
+      return rejectWithValue(error.response?.data || error.message);
+    }
+  }
+);
 
 export const fetchQuestionFilters = createAsyncThunk(
   'questions/fetchQuestionFilters',

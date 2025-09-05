@@ -34,15 +34,16 @@ const UserManagement = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [filterClass, setFilterClass] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
-
+  const [totalUsers, setTotalUsers] = useState(0); // NEW state
   // ---------------- Fetch Users ----------------
   const fetchUsers = async (limit = 50, offset = 0) => {
     try {
       setLoading(true);
       setError(null);
-
+       const response = await userAPI.getAllUsers(limit, offset);
       const usersArray = await userAPI.getAllUsers(limit, offset);
       setUsers(usersArray);
+       setTotalUsers(response.total || usersArray.length);
     } catch (err) {
       setError(err.message || "Failed to fetch users");
       console.error("Error fetching users:", err);
@@ -91,7 +92,7 @@ const UserManagement = () => {
       const user = users.find((u) => u.id === userId);
       if (!user) return;
 
-      const newStatus = user.status === "ACTIVE" ? "inactive" : "ACTIVE";
+      const newStatus = user.status === "ACTIVE" ? "DEACTIVE" : "ACTIVE";
       await userAPI.updateUserStatus(userId, newStatus);
 
       const updated = users.map((user) =>
@@ -246,6 +247,7 @@ const UserManagement = () => {
             </button>
           </div>
         </div>
+        <p>TOTAL USERS: {totalUsers}</p>
 
         <p className="text-gray-600 mb-6">
           Manage all users, view their profiles, and handle their access and status.
@@ -271,9 +273,9 @@ const UserManagement = () => {
             onChange={(e) => setFilterStatus(e.target.value)}
             className="border border-gray-300 p-2.5 rounded-lg bg-white"
           >
-            <option value="">All Statuses</option>
+            
             <option value="ACTIVE">Active</option>
-            <option value="inactive">Inactive</option>
+            <option value="DEACTIVE">Deactive</option>
           </select>
         </div>
 

@@ -23,29 +23,49 @@ api.interceptors.request.use(
 );
 
 // Async thunks
-export const fetchSubjects = createAsyncThunk(
-  'audioLecture/fetchSubjects',
+export const fetchSubjectsAndCourses = createAsyncThunk(
+  'audioLecture/fetchSubjectsAndCourses',
   async (_, { rejectWithValue }) => {
     try {
-      const res = await api.get('/subject/list', {
-        params: {
-          limit: 100,
-          offset: 0,
-          status: 'ACTIVE'
-        }
-      });
-      return res.data?.result || [];
+      const [subjectsRes, coursesRes] = await Promise.all([
+        api.get('/subject/list', {
+          params: { limit: 100, offset: 0, status: 'ACTIVE' }
+        }),
+        api.get('/course/admin', {
+          params: { limit: 100, offset: 0, status: 'ACTIVE' }
+        })
+      ]);
+
+      const subjectData = subjectsRes.data?.result || [];
+      const courseData = coursesRes.data?.result || [];
+      const allItems = [...subjectData, ...courseData];
+
+      const filterOptions = {
+        grades: [...new Set(allItems.map(item => item.grade?.name).filter(Boolean))],
+        streams: [...new Set(allItems.map(item => item.stream?.name).filter(Boolean))],
+        semesters: [...new Set(allItems.map(item => item.semester?.name).filter(Boolean))],
+        degrees: [...new Set(allItems.map(item => item.degree?.name).filter(Boolean))],
+        universities: [...new Set(allItems.map(item => item.university?.name).filter(Boolean))],
+        names: [...new Set(allItems.map(item => item.subMaster?.name || item.name).filter(Boolean))],
+        exams: [...new Set(allItems.map(item => item.exam?.name).filter(Boolean))]
+      };
+
+      return { subjects: subjectData, courses: courseData, filterOptions };
     } catch (err) {
-      return rejectWithValue(err.response?.data || 'Failed to fetch subjects');
+      return rejectWithValue(err.response?.data || 'Failed to fetch data');
     }
   }
 );
 
 export const fetchUnits = createAsyncThunk(
   'audioLecture/fetchUnits',
-  async (subjectId, { rejectWithValue }) => {
+  async ({ id, type }, { rejectWithValue }) => {
     try {
-      const res = await api.get(`/unit/list?subjectId=${subjectId}&limit=100&offset=0`);
+      const endpoint = type === 'subjects' 
+        ? `/unit/list?subjectId=${id}&limit=100&offset=0`
+        : `/unit/list?courseId=${id}&limit=100&offset=0`;
+      
+      const res = await api.get(endpoint);
       return res.data?.result || [];
     } catch (err) {
       return rejectWithValue(err.response?.data || 'Failed to fetch units');
@@ -157,35 +177,45 @@ export const uploadThumbnail = createAsyncThunk(
 
 // Initial state
 const initialState = {
+  // Data
   subjects: [],
-  units: [],
-  filteredSubjects: [],
-  audioLectures: [],
-  loading: false,
+  courses: [],
+  subjectUnits: [],
+  courseUnits: [],
+  subjectAudioLectures: [],
+  courseAudioLectures: [],
+  
+  // UI State
+  activeTab: "subjects",
   selectedSubject: "",
-  selectedUnit: "",
+  selectedCourse: "",
+  selectedSubjectUnit: "",
+  selectedCourseUnit: "",
+  loading: false,
   message: "",
   playingAudio: null,
   audioError: null,
   audioElement: null,
   
-  // Form states
+  // Form State
   title: "",
   description: "",
   duration: "",
   price: 0,
+  validityDays: 0,
   accessTypes: "FREE",
   editingAudio: null,
   
-  // Filter states
+  // Filters
   filters: {
     grade: "",
     stream: "",
     semester: "",
     degree: "",
     university: "",
-    subjectName: "",
-    accessTypes: ""
+    name: "",
+    accessTypes: "",
+    exam: ""
   },
   
   // Filter options
@@ -195,8 +225,13 @@ const initialState = {
     semesters: [],
     degrees: [],
     universities: [],
-    subjectNames: []
-  }
+    names: [],
+    exams: []
+  },
+  
+  // Filtered Data
+  filteredSubjects: [],
+  filteredCourses: []
 };
 
 // Slice
@@ -204,13 +239,31 @@ const audioLectureSlice = createSlice({
   name: 'audioLecture',
   initialState,
   reducers: {
+    setActiveTab: (state, action) => {
+      state.activeTab = action.payload;
+      // Reset selections when changing tabs
+      state.selectedSubject = "";
+      state.selectedCourse = "";
+      state.selectedSubjectUnit = "";
+      state.selectedCourseUnit = "";
+      state.subjectAudioLectures = [];
+      state.courseAudioLectures = [];
+    },
     setSelectedSubject: (state, action) => {
       state.selectedSubject = action.payload;
-      state.selectedUnit = "";
-      state.audioLectures = [];
+      state.selectedSubjectUnit = "";
+      state.subjectAudioLectures = [];
     },
-    setSelectedUnit: (state, action) => {
-      state.selectedUnit = action.payload;
+    setSelectedCourse: (state, action) => {
+      state.selectedCourse = action.payload;
+      state.selectedCourseUnit = "";
+      state.courseAudioLectures = [];
+    },
+    setSelectedSubjectUnit: (state, action) => {
+      state.selectedSubjectUnit = action.payload;
+    },
+    setSelectedCourseUnit: (state, action) => {
+      state.selectedCourseUnit = action.payload;
     },
     setTitle: (state, action) => {
       state.title = action.payload;
@@ -224,6 +277,9 @@ const audioLectureSlice = createSlice({
     setPrice: (state, action) => {
       state.price = action.payload;
     },
+    setValidityDays: (state, action) => {
+      state.validityDays = action.payload;
+    },
     setAccessTypes: (state, action) => {
       state.accessTypes = action.payload;
     },
@@ -235,40 +291,79 @@ const audioLectureSlice = createSlice({
         state.duration = action.payload.duration || "";
         state.accessTypes = action.payload.accessTypes;
         state.price = action.payload.price || 0;
+        state.validityDays = action.payload.validityDays || 0;
       }
     },
     setFilter: (state, action) => {
       const { filterType, value } = action.payload;
       state.filters[filterType] = value;
       
-      // Apply filters to subjects
-      let filtered = [...state.subjects];
-      
-      if (state.filters.grade) {
-        filtered = filtered.filter(item => item.grade?.name === state.filters.grade);
+      // Apply filters to subjects or courses based on active tab
+      if (state.activeTab === "subjects") {
+        let filtered = [...state.subjects];
+        
+        if (state.filters.grade) {
+          filtered = filtered.filter(item => item.grade?.name === state.filters.grade);
+        }
+        
+        if (state.filters.stream) {
+          filtered = filtered.filter(item => item.stream?.name === state.filters.stream);
+        }
+        
+        if (state.filters.semester) {
+          filtered = filtered.filter(item => item.semester?.name === state.filters.semester);
+        }
+        
+        if (state.filters.degree) {
+          filtered = filtered.filter(item => item.degree?.name === state.filters.degree);
+        }
+        
+        if (state.filters.university) {
+          filtered = filtered.filter(item => item.university?.name === state.filters.university);
+        }
+        
+        if (state.filters.name) {
+          filtered = filtered.filter(item => item.subMaster?.name === state.filters.name);
+        }
+        
+        if (state.filters.exam) {
+          filtered = filtered.filter(item => item.exam?.name === state.filters.exam);
+        }
+        
+        state.filteredSubjects = filtered;
+      } else {
+        let filtered = [...state.courses];
+        
+        if (state.filters.grade) {
+          filtered = filtered.filter(item => item.grade?.name === state.filters.grade);
+        }
+        
+        if (state.filters.stream) {
+          filtered = filtered.filter(item => item.stream?.name === state.filters.stream);
+        }
+        
+        if (state.filters.semester) {
+          filtered = filtered.filter(item => item.semester?.name === state.filters.semester);
+        }
+        
+        if (state.filters.degree) {
+          filtered = filtered.filter(item => item.degree?.name === state.filters.degree);
+        }
+        
+        if (state.filters.university) {
+          filtered = filtered.filter(item => item.university?.name === state.filters.university);
+        }
+        
+        if (state.filters.name) {
+          filtered = filtered.filter(item => item.name === state.filters.name);
+        }
+        
+        if (state.filters.exam) {
+          filtered = filtered.filter(item => item.exam?.name === state.filters.exam);
+        }
+        
+        state.filteredCourses = filtered;
       }
-      
-      if (state.filters.stream) {
-        filtered = filtered.filter(item => item.stream?.name === state.filters.stream);
-      }
-      
-      if (state.filters.semester) {
-        filtered = filtered.filter(item => item.semester?.name === state.filters.semester);
-      }
-      
-      if (state.filters.degree) {
-        filtered = filtered.filter(item => item.degree?.name === state.filters.degree);
-      }
-      
-      if (state.filters.university) {
-        filtered = filtered.filter(item => item.university?.name === state.filters.university);
-      }
-      
-      if (state.filters.subjectName) {
-        filtered = filtered.filter(item => item.subMaster?.name === state.filters.subjectName);
-      }
-      
-      state.filteredSubjects = filtered;
     },
     clearFilters: (state) => {
       state.filters = {
@@ -277,10 +372,14 @@ const audioLectureSlice = createSlice({
         semester: "",
         degree: "",
         university: "",
-        subjectName: "",
-        accessTypes: ""
+        name: "",
+        accessTypes: "",
+        exam: ""
       };
-      state.filteredSubjects = state.subjects;
+      
+      // Reset filtered data
+      state.filteredSubjects = [...state.subjects];
+      state.filteredCourses = [...state.courses];
     },
     setMessage: (state, action) => {
       state.message = action.payload;
@@ -300,40 +399,27 @@ const audioLectureSlice = createSlice({
       state.duration = "";
       state.accessTypes = "FREE";
       state.price = 0;
+      state.validityDays = 0;
       state.editingAudio = null;
     },
   },
   extraReducers: (builder) => {
     builder
-      // Fetch subjects
-      .addCase(fetchSubjects.pending, (state) => {
+      // Fetch subjects and courses
+      .addCase(fetchSubjectsAndCourses.pending, (state) => {
         state.loading = true;
       })
-      .addCase(fetchSubjects.fulfilled, (state, action) => {
+      .addCase(fetchSubjectsAndCourses.fulfilled, (state, action) => {
         state.loading = false;
-        state.subjects = action.payload;
-        state.filteredSubjects = action.payload;
-        
-        // Extract unique values for filters
-        const grades = [...new Set(action.payload.map(item => item.grade?.name).filter(Boolean))];
-        const streams = [...new Set(action.payload.map(item => item.stream?.name).filter(Boolean))];
-        const semesters = [...new Set(action.payload.map(item => item.semester?.name).filter(Boolean))];
-        const degrees = [...new Set(action.payload.map(item => item.degree?.name).filter(Boolean))];
-        const universities = [...new Set(action.payload.map(item => item.university?.name).filter(Boolean))];
-        const subjectNames = [...new Set(action.payload.map(item => item.subMaster?.name).filter(Boolean))];
-        
-        state.filterOptions = {
-          grades,
-          streams,
-          semesters,
-          degrees,
-          universities,
-          subjectNames
-        };
+        state.subjects = action.payload.subjects;
+        state.courses = action.payload.courses;
+        state.filteredSubjects = action.payload.subjects;
+        state.filteredCourses = action.payload.courses;
+        state.filterOptions = action.payload.filterOptions;
       })
-      .addCase(fetchSubjects.rejected, (state, action) => {
+      .addCase(fetchSubjectsAndCourses.rejected, (state) => {
         state.loading = false;
-        state.message = "Failed to load subjects.";
+        state.message = "Failed to load data.";
       })
       // Fetch units
       .addCase(fetchUnits.pending, (state) => {
@@ -341,9 +427,13 @@ const audioLectureSlice = createSlice({
       })
       .addCase(fetchUnits.fulfilled, (state, action) => {
         state.loading = false;
-        state.units = action.payload;
+        if (state.activeTab === "subjects") {
+          state.subjectUnits = action.payload;
+        } else {
+          state.courseUnits = action.payload;
+        }
       })
-      .addCase(fetchUnits.rejected, (state, action) => {
+      .addCase(fetchUnits.rejected, (state) => {
         state.loading = false;
         state.message = "Failed to load units.";
       })
@@ -353,9 +443,13 @@ const audioLectureSlice = createSlice({
       })
       .addCase(fetchAudioLectures.fulfilled, (state, action) => {
         state.loading = false;
-        state.audioLectures = action.payload;
+        if (state.activeTab === "subjects") {
+          state.subjectAudioLectures = action.payload;
+        } else {
+          state.courseAudioLectures = action.payload;
+        }
       })
-      .addCase(fetchAudioLectures.rejected, (state, action) => {
+      .addCase(fetchAudioLectures.rejected, (state) => {
         state.loading = false;
         state.message = "Failed to load audio lectures.";
       })
@@ -367,6 +461,7 @@ const audioLectureSlice = createSlice({
         state.duration = "";
         state.accessTypes = "FREE";
         state.price = 0;
+        state.validityDays = 0;
       })
       .addCase(addAudioLecture.rejected, (state) => {
         state.message = "❌ Failed to add audio lecture.";
@@ -380,6 +475,7 @@ const audioLectureSlice = createSlice({
         state.duration = "";
         state.accessTypes = "FREE";
         state.price = 0;
+        state.validityDays = 0;
       })
       .addCase(updateAudioLecture.rejected, (state) => {
         state.message = "❌ Failed to update audio lecture.";
@@ -402,12 +498,16 @@ const audioLectureSlice = createSlice({
 });
 
 export const {
+  setActiveTab,
   setSelectedSubject,
-  setSelectedUnit,
+  setSelectedCourse,
+  setSelectedSubjectUnit,
+  setSelectedCourseUnit,
   setTitle,
   setDescription,
   setDuration,
   setPrice,
+  setValidityDays,
   setAccessTypes,
   setEditingAudio,
   setFilter,

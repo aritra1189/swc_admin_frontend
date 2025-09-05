@@ -9,7 +9,7 @@ const BannerManagement = () => {
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
   const [totalBanners, setTotalBanners] = useState(0);
-  const [statusFilter, setStatusFilter] = useState('ALL');
+  const [statusFilter, setStatusFilter] = useState('ACTIVE');
   const [editMode, setEditMode] = useState(false);
   const [currentBanner, setCurrentBanner] = useState(null);
   const [imageFile, setImageFile] = useState(null);
@@ -30,7 +30,7 @@ const BannerManagement = () => {
   }, []);
 
   const statusOptions = [
-    { value: 'ALL', label: 'All Banners' },
+    // { value: 'ALL', label: 'All Banners' },
     { value: 'ACTIVE', label: 'Active' },
     { value: 'PENDING', label: 'Pending Approval' },
     { value: 'SUSPENDED', label: 'Suspended' },

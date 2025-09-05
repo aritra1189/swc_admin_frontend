@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import {
   fetchQuestions,
@@ -8,7 +8,8 @@ import {
   updateQuestionStatus,
   setFilters,
   resetFilters,
-  fetchMcqTests
+  fetchMcqTests,
+  uploadOptionImage
 } from '../store/questionSlice';
 
 const useQuestionState = () => {
@@ -68,6 +69,7 @@ const QuestionManagement = () => {
 
   const [showAddModal, setShowAddModal] = useState(false);
   const [showPreviousModal, setShowPreviousModal] = useState(false);
+  const [selectedQuestion, setSelectedQuestion] = useState(null);
   const [formData, setFormData] = useState({
     questionText: '',
     questionType: 'SINGLE_CHOICE',
@@ -85,20 +87,112 @@ const QuestionManagement = () => {
     questionId: '',
     mcqTestId: ''
   });
-
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const fileInputRefs = useRef({});
+   const [filteredMcqTests, setFilteredMcqTests] = useState([]);
   // Load initial data and MCQ tests
   useEffect(() => {
     dispatch(fetchQuestions(filters));
     dispatch(fetchMcqTests());
     dispatch(fetchQuestionFilters());
   }, [dispatch]);
-
+  useEffect(() => {
+    if (mcqTests.length > 0) {
+      let filtered = [...mcqTests];
+      
+      // Apply filters based on selected values
+      if (filters.universityId) {
+        filtered = filtered.filter(test => 
+          test.unit?.subject?.universityId === filters.universityId
+        );
+      }
+      
+      if (filters.degreeId) {
+        filtered = filtered.filter(test => 
+          test.unit?.subject?.degreeId === filters.degreeId
+        );
+      }
+      
+      if (filters.streamId) {
+        filtered = filtered.filter(test => 
+          test.unit?.subject?.streamId === filters.streamId
+        );
+      }
+      
+      if (filters.gradeId) {
+        filtered = filtered.filter(test => 
+          test.unit?.subject?.gradeId === filters.gradeId
+        );
+      }
+      
+      if (filters.semesterId) {
+        filtered = filtered.filter(test => 
+          test.unit?.subject?.semesterId === filters.semesterId
+        );
+      }
+      
+      if (filters.masterSubId) {
+        filtered = filtered.filter(test => 
+          test.unit?.subject?.subMasterId === filters.masterSubId
+        );
+      }
+      
+      if (filters.subjectId) {
+        filtered = filtered.filter(test => 
+          test.unit?.subjectId === filters.subjectId
+        );
+      }
+      
+      setFilteredMcqTests(filtered);
+    }
+  }, [filters, mcqTests]);
   // Handle server-side filter changes
   const handleFilterChange = (field, value) => {
     const newFilters = { ...filters, [field]: value, offset: 0 };
     dispatch(setFilters(newFilters));
+  
+if (field === 'universityId') {
+      newFilters.degreeId = '';
+      newFilters.streamId = '';
+      newFilters.gradeId = '';
+      newFilters.semesterId = '';
+      newFilters.masterSubId = '';
+      newFilters.subjectId = '';
+      newFilters.unitId = '';
+      newFilters.mcqTestId = '';
+    } else if (field === 'degreeId') {
+      newFilters.streamId = '';
+      newFilters.gradeId = '';
+      newFilters.semesterId = '';
+      newFilters.masterSubId = '';
+      newFilters.subjectId = '';
+      newFilters.unitId = '';
+      newFilters.mcqTestId = '';
+    } else if (field === 'streamId') {
+      newFilters.gradeId = '';
+      newFilters.semesterId = '';
+      newFilters.masterSubId = '';
+      newFilters.subjectId = '';
+      newFilters.unitId = '';
+      newFilters.mcqTestId = '';
+    } else if (field === 'gradeId' || field === 'semesterId') {
+      newFilters.masterSubId = '';
+      newFilters.subjectId = '';
+      newFilters.unitId = '';
+      newFilters.mcqTestId = '';
+    } else if (field === 'masterSubId') {
+      newFilters.subjectId = '';
+      newFilters.unitId = '';
+      newFilters.mcqTestId = '';
+    } else if (field === 'subjectId') {
+      newFilters.unitId = '';
+      newFilters.mcqTestId = '';
+    } else if (field === 'unitId') {
+      newFilters.mcqTestId = '';
+    }
+    
+    dispatch(setFilters(newFilters));
   };
-
   // Handle search with filters
   const handleSearch = () => {
     dispatch(fetchQuestions(filters));
@@ -153,7 +247,15 @@ const QuestionManagement = () => {
   // Handle option changes
   const handleOptionChange = (index, field, value) => {
     const newOptions = [...formData.options];
-    newOptions[index][field] = value;
+    
+    if (field === 'optionImage' && value instanceof File) {
+      // Create a preview URL for the image
+      const previewUrl = URL.createObjectURL(value);
+      newOptions[index].optionImagePreview = previewUrl;
+      newOptions[index].optionImageFile = value;
+    } else {
+      newOptions[index][field] = value;
+    }
     
     if (field === 'isCorrect' && value && formData.questionType === 'SINGLE_CHOICE') {
       newOptions.forEach((option, i) => {
@@ -162,6 +264,26 @@ const QuestionManagement = () => {
     }
     
     setFormData(prev => ({ ...prev, options: newOptions }));
+  };
+
+  // Handle image upload for an option
+  const handleImageUpload = async (optionIndex, optionId) => {
+    const fileInput = fileInputRefs.current[optionIndex];
+    if (!fileInput || !fileInput.files[0]) return;
+    
+    const file = fileInput.files[0];
+    setUploadingImage(true);
+    
+    try {
+      await dispatch(uploadOptionImage({ optionId, file })).unwrap();
+      // Refresh questions to get the updated data
+      dispatch(fetchQuestions(filters));
+    } catch (error) {
+      console.error('Failed to upload image:', error);
+    } finally {
+      setUploadingImage(false);
+      fileInput.value = ''; // Reset file input
+    }
   };
 
   // Add new option
@@ -185,7 +307,32 @@ const QuestionManagement = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      await dispatch(createQuestion(formData)).unwrap();
+      // First create the question without images
+      const questionData = {
+        ...formData,
+        options: formData.options.map(option => ({
+          optionText: option.optionText,
+          isCorrect: option.isCorrect,
+          optionOrder: option.optionOrder
+        }))
+      };
+      
+      const result = await dispatch(createQuestion(questionData)).unwrap();
+      const newQuestion = result.result || result;
+      
+      // Upload images for options that have them
+      const uploadPromises = formData.options
+        .filter(option => option.optionImageFile)
+        .map(async (option, index) => {
+          const optionId = newQuestion.options[index].id;
+          return dispatch(uploadOptionImage({
+            optionId,
+            file: option.optionImageFile
+          })).unwrap();
+        });
+      
+      await Promise.all(uploadPromises);
+      
       setShowAddModal(false);
       setFormData({
         questionText: '',
@@ -200,6 +347,7 @@ const QuestionManagement = () => {
           { optionText: '', isCorrect: false, optionOrder: 'D' }
         ]
       });
+      
       dispatch(fetchQuestions(filters));
     } catch (error) {
       console.error('Failed to create question:', error);
@@ -220,6 +368,11 @@ const QuestionManagement = () => {
     } catch (error) {
       console.error('Failed to add previous question:', error);
     }
+  };
+
+  // View question details
+  const viewQuestionDetails = (question) => {
+    setSelectedQuestion(question);
   };
 
   return (
@@ -255,156 +408,6 @@ const QuestionManagement = () => {
         <h2 className="text-xl font-semibold mb-4 text-gray-800">Filters</h2>
         
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 mb-4">
-          {/* University */}
-          {/* <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">University</label>
-            <select
-              value={filters.universityId || ''}
-              onChange={(e) => handleFilterChange('universityId', e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="">All Universities</option>
-              {filterOptions.universities.map(university => (
-                <option key={university.id} value={university.id}>{university.name}</option>
-              ))}
-            </select>
-          </div>
-
-          {/* Degree */}
-          {/* <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Degree</label>
-            <select
-              value={filters.degreeId || ''}
-              onChange={(e) => handleFilterChange('degreeId', e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="">All Degrees</option>
-              {filterOptions.degrees.map(degree => (
-                <option key={degree.id} value={degree.id}>{degree.name}</option>
-              ))}
-            </select>
-          </div>
-
-          {/* Stream */}
-          {/* <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Stream</label>
-            <select
-              value={filters.streamId || ''}
-              onChange={(e) => handleFilterChange('streamId', e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="">All Streams</option>
-              {filterOptions.streams.map(stream => (
-                <option key={stream.id} value={stream.id}>{stream.name}</option>
-              ))}
-            </select>
-          </div> */}
-
-          {/* Grade */}
-          {/* <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Grade</label>
-            <select
-              value={filters.gradeId || ''}
-              onChange={(e) => handleFilterChange('gradeId', e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="">All Grades</option>
-              {filterOptions.grades.map(grade => (
-                <option key={grade.id} value={grade.id}>{grade.name}</option>
-              ))}
-            </select>
-          </div> */}
-
-          {/* Semester */}
-          {/* <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Semester</label>
-            <select
-              value={filters.semesterId || ''}
-              onChange={(e) => handleFilterChange('semesterId', e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="">All Semesters</option>
-              {filterOptions.semesters.map(semester => (
-                <option key={semester.id} value={semester.id}>{semester.name}</option>
-              ))}
-            </select>
-          </div> */}
-
-          {/* Master Subject */}
-          {/* <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Master Subject</label>
-            <select
-              value={filters.masterSubId || ''}
-              onChange={(e) => handleFilterChange('masterSubId', e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="">All Master Subjects</option>
-              {filterOptions.masterSubjects.map(subject => (
-                <option key={subject.id} value={subject.id}>{subject.name}</option>
-              ))}
-            </select>
-          </div> */}
-
-          {/* Subject */}
-          {/* <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Subject</label>
-            <select
-              value={filters.subjectId || ''}
-              onChange={(e) => handleFilterChange('subjectId', e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="">All Subjects</option>
-              {filterOptions.subjects.map(subject => (
-                <option key={subject.id} value={subject.id}>{subject.name}</option>
-              ))}
-            </select>
-          </div> */}
-
-          {/* Unit */}
-          {/* <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Unit</label>
-            <select
-              value={filters.unitId || ''}
-              onChange={(e) => handleFilterChange('unitId', e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="">All Units</option>
-              {filterOptions.units.map(unit => (
-                <option key={unit.id} value={unit.id}>{unit.name}</option>
-              ))}
-            </select>
-          </div>  */} 
-
-          {/* Exam Type */}
-          {/* <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Exam Type</label>
-            <select
-              value={filters.examTypeId || ''}
-              onChange={(e) => handleFilterChange('examTypeId', e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="">All Exam Types</option>
-              {filterOptions.examTypes.map(examType => (
-                <option key={examType.id} value={examType.id}>{examType.name}</option>
-              ))}
-            </select>
-          </div> */}
-
-          {/* Exam */}
-          {/* <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Exam</label>
-            <select
-              value={filters.examId || ''}
-              onChange={(e) => handleFilterChange('examId', e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="">All Exams</option>
-              {filterOptions.exams.map(exam => (
-                <option key={exam.id} value={exam.id}>{exam.name}</option>
-              ))}
-            </select>
-          </div> */}
-
           {/* Keyword Search */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Search Keyword</label>
@@ -416,7 +419,7 @@ const QuestionManagement = () => {
               placeholder="Search questions..."
             />
           </div>
-
+        
           {/* Question Type */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Question Type</label>
@@ -498,6 +501,11 @@ const QuestionManagement = () => {
                           <div className="text-sm font-medium text-gray-900 line-clamp-2">
                             {question.questionText}
                           </div>
+                          {question.options && question.options.some(opt => opt.optionImage) && (
+                            <div className="text-xs text-blue-600 mt-1">
+                              Contains images
+                            </div>
+                          )}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800">
@@ -522,6 +530,12 @@ const QuestionManagement = () => {
                           </span>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                          <button 
+                            onClick={() => viewQuestionDetails(question)}
+                            className="text-blue-600 hover:text-blue-900 mr-3"
+                          >
+                            View
+                          </button>
                           <button
                             onClick={() => handleStatusChange(question.id, question.status)}
                             className={`mr-3 ${
@@ -532,7 +546,6 @@ const QuestionManagement = () => {
                           >
                             {question.status === 'ACTIVE' ? 'Deactivate' : 'Activate'}
                           </button>
-                          <button className="text-blue-600 hover:text-blue-900">Edit</button>
                         </td>
                       </tr>
                     ))
@@ -653,8 +666,6 @@ const QuestionManagement = () => {
                 </select>
               </div>
 
-              
-
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Explanation</label>
                 <textarea
@@ -696,6 +707,44 @@ const QuestionManagement = () => {
                         className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                         required
                       />
+                      
+                      {/* Image upload section */}
+                      <div className="flex flex-col items-center">
+                        {option.optionImagePreview ? (
+                          <div className="relative">
+                            <img 
+                              src={option.optionImagePreview} 
+                              alt="Option preview" 
+                              className="h-12 w-12 object-cover rounded-md"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => handleOptionChange(index, 'optionImage', null)}
+                              className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full h-5 w-5 flex items-center justify-center text-xs"
+                            >
+                              ×
+                            </button>
+                          </div>
+                        ) : (
+                          <>
+                            <input
+                              type="file"
+                              ref={el => fileInputRefs.current[index] = el}
+                              onChange={(e) => handleOptionChange(index, 'optionImage', e.target.files[0])}
+                              accept="image/*"
+                              className="hidden"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => fileInputRefs.current[index]?.click()}
+                              className="px-2 py-1 bg-gray-200 text-gray-700 rounded-md text-sm hover:bg-gray-300"
+                            >
+                              Add Image
+                            </button>
+                          </>
+                        )}
+                      </div>
+                      
                       {formData.options.length > 2 && (
                         <button
                           type="button"
@@ -790,6 +839,64 @@ const QuestionManagement = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Question Details Modal */}
+      {selectedQuestion && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full flex items-center justify-center z-50">
+          <div className="relative bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-white px-6 py-4 border-b border-gray-200">
+              <h3 className="text-xl font-semibold text-gray-900">Question Details</h3>
+              <button
+                onClick={() => setSelectedQuestion(null)}
+                className="absolute top-4 right-6 text-gray-400 hover:text-gray-500"
+              >
+                <span className="text-2xl">&times;</span>
+              </button>
+            </div>
+            
+            <div className="p-6">
+              <div className="mb-4">
+                <h4 className="text-lg font-medium text-gray-900">Question:</h4>
+                <p className="mt-1 text-gray-700">{selectedQuestion.questionText}</p>
+              </div>
+              
+              <div className="mb-4">
+                <h4 className="text-lg font-medium text-gray-900">Options:</h4>
+                <div className="mt-2 space-y-3">
+                  {selectedQuestion.options && selectedQuestion.options.map((option, index) => (
+                    <div key={index} className="flex items-start">
+                      <span className={`mr-2 ${option.isCorrect ? 'text-green-600 font-bold' : 'text-gray-600'}`}>
+                        {String.fromCharCode(65 + index)}.
+                      </span>
+                      <div>
+                        <p className={option.isCorrect ? 'text-green-700 font-medium' : 'text-gray-700'}>
+                          {option.optionText}
+                        </p>
+                        {option.optionImage && (
+                          <div className="mt-2">
+                            <img 
+                              src={option.optionImage} 
+                              alt={`Option ${String.fromCharCode(65 + index)}`}
+                              className="max-h-40 rounded-md border border-gray-200"
+                            />
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              
+              {selectedQuestion.explanation && (
+                <div>
+                  <h4 className="text-lg font-medium text-gray-900">Explanation:</h4>
+                  <p className="mt-1 text-gray-700">{selectedQuestion.explanation}</p>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}

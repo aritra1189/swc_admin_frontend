@@ -42,11 +42,12 @@ export const userAPI = {
 
   updateUserStatus: async (userId, status) => {
     try {
-      const response = await fetch(`${API_BASE_URL}/users/${userId}/status`, {
-        method: "PATCH",
+      const response = await fetch(`${API_BASE_URL}/account/user/status/${userId}`, {
+        method: "put",
         headers: getAuthHeaders(),
         body: JSON.stringify({ status }),
       });
+   
 
       if (!response.ok) {
         const errorData = await response.json();

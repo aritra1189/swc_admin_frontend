@@ -156,7 +156,7 @@ const initialState = {
   courseUnits: [],
   subjectMcqTests: [],
   courseMcqTests: [],
-  validityDays: 0,
+  
   // UI State
   activeTab: "subjects",
   selectedSubject: "",
@@ -216,14 +216,6 @@ const mcqTestSlice = createSlice({
       state.selectedCourseUnit = "";
       state.subjectMcqTests = [];
       state.courseMcqTests = [];
-      // Reset form
-      state.title = "";
-      state.description = "";
-      state.timeLimit = 30;
-      state.price = 0;
-      state.accessTypes = "FREE";
-      state.validityDays = 0;
-      state.editingTest = null;
     },
     setSelectedSubject: (state, action) => {
       state.selectedSubject = action.payload;
@@ -256,31 +248,23 @@ const mcqTestSlice = createSlice({
     setAccessTypes: (state, action) => {
       state.accessTypes = action.payload;
     },
-    setvalidityDays: (state, action) => {
-      state.validityDays = action.payload;
+    setEditingTest: (state, action) => {
+      state.editingTest = action.payload;
+      if (action.payload) {
+        state.title = action.payload.title;
+        state.description = action.payload.description || "";
+        state.timeLimit = action.payload.timeLimit || 30;
+        state.accessTypes = action.payload.accessTypes;
+        state.price = action.payload.price || 0;
+      }
     },
-    // In your slice file
-setEditingTest: (state, action) => {
-  state.editingTest = action.payload;
-  if (action.payload) {
-    state.title = action.payload.title;
-    state.description = action.payload.description || "";
-    state.timeLimit = action.payload.timeLimit || 30;
-    state.accessTypes = action.payload.accessTypes;
-    state.price = action.payload.price || 0;
-    
-    // Fixed: Handle validityDays properly
-    
-    state.validityDays = action.payload.validityDays?parseInt(action.payload.validityDays):0;
-  }
-},
     setFilter: (state, action) => {
       const { filterType, value } = action.payload;
       state.filters[filterType] = value;
       
-      // Apply filters to subjects and courses
-      const filterItems = (items, isSubject) => {
-        let filtered = [...items];
+      // Apply filters to subjects or courses based on active tab
+      if (state.activeTab === "subjects") {
+        let filtered = [...state.subjects];
         
         if (state.filters.grade) {
           filtered = filtered.filter(item => item.grade?.name === state.filters.grade);
@@ -303,22 +287,47 @@ setEditingTest: (state, action) => {
         }
         
         if (state.filters.name) {
-          if (isSubject) {
-            filtered = filtered.filter(item => item.subMaster?.name === state.filters.name);
-          } else {
-            filtered = filtered.filter(item => item.name === state.filters.name);
-          }
+          filtered = filtered.filter(item => item.subMaster?.name === state.filters.name);
         }
         
         if (state.filters.exam) {
           filtered = filtered.filter(item => item.exam?.name === state.filters.exam);
         }
         
-        return filtered;
-      };
-      
-      state.filteredSubjects = filterItems(state.subjects, true);
-      state.filteredCourses = filterItems(state.courses, false);
+        state.filteredSubjects = filtered;
+      } else {
+        let filtered = [...state.courses];
+        
+        if (state.filters.grade) {
+          filtered = filtered.filter(item => item.grade?.name === state.filters.grade);
+        }
+        
+        if (state.filters.stream) {
+          filtered = filtered.filter(item => item.stream?.name === state.filters.stream);
+        }
+        
+        if (state.filters.semester) {
+          filtered = filtered.filter(item => item.semester?.name === state.filters.semester);
+        }
+        
+        if (state.filters.degree) {
+          filtered = filtered.filter(item => item.degree?.name === state.filters.degree);
+        }
+        
+        if (state.filters.university) {
+          filtered = filtered.filter(item => item.university?.name === state.filters.university);
+        }
+        
+        if (state.filters.name) {
+          filtered = filtered.filter(item => item.name === state.filters.name);
+        }
+        
+        if (state.filters.exam) {
+          filtered = filtered.filter(item => item.exam?.name === state.filters.exam);
+        }
+        
+        state.filteredCourses = filtered;
+      }
     },
     clearFilters: (state) => {
       state.filters = {
@@ -345,7 +354,6 @@ setEditingTest: (state, action) => {
       state.timeLimit = 30;
       state.accessTypes = "FREE";
       state.price = 0;
-      state.validityDays = 0;
       state.editingTest = null;
     },
   },
@@ -363,9 +371,9 @@ setEditingTest: (state, action) => {
         state.filteredCourses = action.payload.courses;
         state.filterOptions = action.payload.filterOptions;
       })
-      .addCase(fetchSubjectsAndCourses.rejected, (state, action) => {
+      .addCase(fetchSubjectsAndCourses.rejected, (state) => {
         state.loading = false;
-        state.message = action.payload || "Failed to load data.";
+        state.message = "Failed to load data.";
       })
       // Fetch units
       .addCase(fetchUnits.pending, (state) => {
@@ -379,9 +387,9 @@ setEditingTest: (state, action) => {
           state.courseUnits = action.payload;
         }
       })
-      .addCase(fetchUnits.rejected, (state, action) => {
+      .addCase(fetchUnits.rejected, (state) => {
         state.loading = false;
-        state.message = action.payload || "Failed to load units.";
+        state.message = "Failed to load units.";
       })
       // Fetch MCQ tests
       .addCase(fetchMcqTests.pending, (state) => {
@@ -395,34 +403,24 @@ setEditingTest: (state, action) => {
           state.courseMcqTests = action.payload;
         }
       })
-      .addCase(fetchMcqTests.rejected, (state, action) => {
+      .addCase(fetchMcqTests.rejected, (state) => {
         state.loading = false;
-        state.message = action.payload || "Failed to load MCQ tests.";
+        state.message = "Failed to load MCQ tests.";
       })
       // Add MCQ test
-      .addCase(addMcqTest.pending, (state) => {
-        state.loading = true;
-      })
       .addCase(addMcqTest.fulfilled, (state) => {
-        state.loading = false;
         state.message = "✅ MCQ test added successfully!";
         state.title = "";
         state.description = "";
         state.timeLimit = 30;
         state.accessTypes = "FREE";
         state.price = 0;
-        state.validityDays = 0;
       })
-      .addCase(addMcqTest.rejected, (state, action) => {
-        state.loading = false;
-        state.message = action.payload || "❌ Failed to add MCQ test.";
+      .addCase(addMcqTest.rejected, (state) => {
+        state.message = "❌ Failed to add MCQ test.";
       })
       // Update MCQ test
-      .addCase(updateMcqTest.pending, (state) => {
-        state.loading = true;
-      })
       .addCase(updateMcqTest.fulfilled, (state) => {
-        state.loading = false;
         state.message = "✅ MCQ test updated successfully!";
         state.editingTest = null;
         state.title = "";
@@ -430,24 +428,16 @@ setEditingTest: (state, action) => {
         state.timeLimit = 30;
         state.accessTypes = "FREE";
         state.price = 0;
-        state.validityDays = 0;
       })
-      .addCase(updateMcqTest.rejected, (state, action) => {
-        state.loading = false;
-        state.message = action.payload || "❌ Failed to update MCQ test.";
+      .addCase(updateMcqTest.rejected, (state) => {
+        state.message = "❌ Failed to update MCQ test.";
       })
       // Upload thumbnail
-      .addCase(uploadThumbnail.pending, (state) => {
-        state.loading = true;
-        state.message = "⏳ Uploading thumbnail...";
-      })
       .addCase(uploadThumbnail.fulfilled, (state) => {
-        state.loading = false;
         state.message = "✅ Thumbnail uploaded successfully!";
       })
-      .addCase(uploadThumbnail.rejected, (state, action) => {
-        state.loading = false;
-        state.message = action.payload || "❌ Failed to upload thumbnail.";
+      .addCase(uploadThumbnail.rejected, (state) => {
+        state.message = "❌ Failed to upload thumbnail.";
       });
   },
 });
@@ -462,7 +452,6 @@ export const {
   setDescription,
   setTimeLimit,
   setPrice,
-  setvalidityDays,
   setAccessTypes,
   setEditingTest,
   setFilter,
