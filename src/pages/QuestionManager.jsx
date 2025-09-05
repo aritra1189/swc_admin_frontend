@@ -10,7 +10,7 @@ import {
   resetFilters,
   fetchMcqTests,
   uploadOptionImage
-} from '../store/questionSlice';
+} from '../store/QuestionSlice';
 
 const useQuestionState = () => {
   const state = useSelector((state) => state.questions || {});
